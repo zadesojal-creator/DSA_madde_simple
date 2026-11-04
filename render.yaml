@@ -10,7 +10,7 @@ services:
       cpp/src/searching_sorting.cpp cpp/src/stack_algorithms.cpp
       cpp/src/tree_heap_algorithms.cpp cpp/src/graph_algorithms.cpp
       cpp/src/recursion_algorithms.cpp -o cpp/bin/array_tracer &&
-      npm --prefix server ci
+      npm --prefix server install
     startCommand: cd server && node index.js
     envVars:
       - key: NODE_VERSION
@@ -22,7 +22,7 @@ services:
     name: dsa-visualizer-web
     runtime: static
     rootDir: .
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
