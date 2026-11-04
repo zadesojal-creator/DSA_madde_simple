@@ -11,7 +11,7 @@ services:
       cpp/src/tree_heap_algorithms.cpp cpp/src/graph_algorithms.cpp
       cpp/src/recursion_algorithms.cpp -o cpp/bin/array_tracer &&
       npm --prefix server install
-    startCommand: cd server && node index.js
+    startCommand: node server/index.js
     envVars:
       - key: NODE_VERSION
         value: 20.19.0
