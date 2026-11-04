@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: dsa-visualizer-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: >-
+      apt-get update &&
+      apt-get install -y g++ &&
+      mkdir -p cpp/bin &&
+      g++ -std=c++17 -O2 cpp/src/main.cpp cpp/src/algorithms.cpp
+      cpp/src/searching_sorting.cpp cpp/src/stack_algorithms.cpp
+      cpp/src/tree_heap_algorithms.cpp cpp/src/graph_algorithms.cpp
+      cpp/src/recursion_algorithms.cpp -o cpp/bin/array_tracer &&
+      npm --prefix server ci
+    startCommand: cd server && node index.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: CORS_ORIGIN
+        value: "*"
+
+  - type: web
+    name: dsa-visualizer-web
+    runtime: static
+    rootDir: .
+    buildCommand: npm ci && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://dsa-visualizer-api.onrender.com
