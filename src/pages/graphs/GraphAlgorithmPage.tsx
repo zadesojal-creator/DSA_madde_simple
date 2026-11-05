@@ -193,7 +193,8 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     initialSpeed: 1
   });
 
-  const { reset: resetPlayback, playFromStart } = playback;
+  // FIX: Destructure play instead of playFromStart
+  const { reset: resetPlayback, play } = playback;
 
   // Execute C++ algorithm
   const runAlgorithmExecution = useCallback(async (autoPlay = true) => {
@@ -219,12 +220,15 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     setEngineStatus(result.engineStatus);
     setEngineMessage(result.engineMessage);
     setIsModified(false);
+    
+    // FIX: Use resetPlayback and play instead of playFromStart
     if (autoPlay && !result.isError) {
-      playFromStart(result.steps.length);
+      resetPlayback();
+      setTimeout(() => play(), 50);
     } else {
       resetPlayback();
     }
-  }, [edges, weighted, vertexCount, activeAlgorithmId, sourceVertex, targetVertex, directed, resetPlayback, playFromStart]);
+  }, [edges, weighted, vertexCount, activeAlgorithmId, sourceVertex, targetVertex, directed, resetPlayback, play]); // FIX: Added play to deps
 
   // Run initial trace on mount or algorithm change
   useEffect(() => {
@@ -300,7 +304,6 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     }
     setIsModified(true);
   };
-
 
 
   const currentStep = playback.currentStep;
