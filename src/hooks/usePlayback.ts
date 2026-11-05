@@ -13,16 +13,17 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
   const [speed, setSpeed] = useState<PlaybackSpeed>(initialSpeed);
 
   const totalSteps = steps.length;
-  const isAtEnd = currentStepIndex >= totalSteps - 1;
+  const isAtEnd = totalSteps > 0 && currentStepIndex >= totalSteps - 1;
   const isAtStart = currentStepIndex <= 0;
 
   // Active step snapshot
   const currentStep: TraceStep | undefined = steps[currentStepIndex];
 
-  const playFromStart = useCallback((stepCount: number) => {
+  const playFromStart = useCallback((stepCount?: number) => {
     setCurrentStepIndex(0);
-    setIsPlaying(stepCount > 1);
-  }, []);
+    const count = stepCount ?? totalSteps;
+    setIsPlaying(count > 1);
+  }, [totalSteps]);
 
   const play = useCallback(() => {
     if (totalSteps <= 1) {
@@ -72,23 +73,35 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!isPlaying || isAtEnd) {
+    if (!isPlaying) {
       if (timerRef.current) clearInterval(timerRef.current);
+      return;
+    }
+
+    if (totalSteps <= 1) {
+      setIsPlaying(false);
       return;
     }
 
     const intervalMs = Math.round(1000 / speed);
     timerRef.current = setInterval(() => {
-      if (currentStepIndex >= totalSteps - 2) {
-        setIsPlaying(false);
-      }
-      setCurrentStepIndex((prev) => Math.min(prev + 1, totalSteps - 1));
+      setCurrentStepIndex((prev) => {
+        if (prev >= totalSteps - 1) {
+          setIsPlaying(false);
+          return prev;
+        }
+        const next = prev + 1;
+        if (next >= totalSteps - 1) {
+          setIsPlaying(false);
+        }
+        return next;
+      });
     }, intervalMs);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, speed, totalSteps, currentStepIndex, isAtEnd]);
+  }, [isPlaying, speed, totalSteps]);
 
   // Keyboard Navigation Listener
   useEffect(() => {

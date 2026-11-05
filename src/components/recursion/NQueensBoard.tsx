@@ -98,9 +98,7 @@ export const NQueensBoard: React.FC<NQueensBoardProps> = ({ currentStep, n }) =>
                     </span>
                   )}
                   {val === 2 && isActive && (
-                    <span className="text-amber-300 opacity-60 select-none" style={{ fontSize: Math.max(cellSize * 0.4, 10) }}>
-                      {QUEEN_SYMBOL}
-                    </span>
+                    <span className="text-amber-300 font-bold select-none text-xs">?</span>
                   )}
                 </div>
               );
@@ -109,22 +107,19 @@ export const NQueensBoard: React.FC<NQueensBoardProps> = ({ currentStep, n }) =>
         ))}
       </div>
 
-      {/* Status */}
+      {/* Status banner */}
       <div className="relative z-10 mt-4 text-center text-xs font-mono">
         {eventType === 'queen_placed' && (
-          <span className="text-violet-300">♛ Queen placed at row {activeRow}, col {activeCol}</span>
+          <span className="text-violet-300">♛ Queen placed at ({activeRow},{activeCol})</span>
         )}
         {eventType === 'backtrack' && (
-          <span className="text-rose-400">↩ Backtrack — removing queen from row {activeRow}, col {activeCol}</span>
-        )}
-        {eventType === 'placement_rejected' && (
-          <span className="text-amber-400">✗ Conflict at ({activeRow},{activeCol}) — trying next column</span>
+          <span className="text-rose-400">↩ Conflict detected / Backtracking from row {activeRow}</span>
         )}
         {eventType === 'solution_found' && (
-          <span className="text-emerald-300 font-bold">✓ Solution #{solutionCount} found!</span>
+          <span className="text-emerald-300 font-bold">✓ Solution #{solutionCount} placed!</span>
         )}
-        {eventType === 'search_complete' && solutionCount === 0 && (
-          <span className="text-rose-400">✗ No solution exists for N={boardSize}</span>
+        {eventType === 'search_complete' && (
+          <span className="text-emerald-300 font-bold">✓ Search complete — {solutionCount} solution(s) visualized</span>
         )}
       </div>
     </div>

@@ -482,6 +482,23 @@ export function getAlgorithmCppCode(op: string): string {
   return typedCatalog.codes[op] || '// C++ source code not available';
 }
 
+function preserveRecursionBoardState(steps: TraceStep[], op: string): TraceStep[] {
+  if (!steps || steps.length === 0 || (op !== 'n-queens' && op !== 'maze')) {
+    return steps;
+  }
+  let lastNonEmpty: number[] = [];
+  return steps.map(s => {
+    if (s.arrayState && s.arrayState.length > 0) {
+      lastNonEmpty = s.arrayState;
+      return s;
+    }
+    if (lastNonEmpty.length > 0) {
+      return { ...s, arrayState: lastNonEmpty };
+    }
+    return s;
+  });
+}
+
 /**
  * Executes a Recursion/Backtracking algorithm through the C++ engine.
  * op: 'factorial' | 'fibonacci' | 'tower-of-hanoi' | 'maze' | 'n-queens'
@@ -519,7 +536,7 @@ export async function executeCppRecursionAlgorithm(
         if (codeRes.ok) sourceCode = await codeRes.text();
       } catch { /* fall back */ }
       return {
-        steps,
+        steps: preserveRecursionBoardState(steps, op),
         engineStatus: 'cpp-native',
         engineMessage: 'Executed live by the native C++ trace runner.',
         sourceCode,
@@ -530,9 +547,20 @@ export async function executeCppRecursionAlgorithm(
   // 2. Precompiled cache
   if (typedCatalog.traces[cacheKey]) {
     return {
-      steps: typedCatalog.traces[cacheKey],
+      steps: preserveRecursionBoardState(typedCatalog.traces[cacheKey], op),
       engineStatus: 'cpp-precompiled',
       engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      sourceCode: defaultCode,
+    };
+  }
+
+  // Fallback: search for closest precompiled trace
+  const fallbackKey = Object.keys(typedCatalog.traces).find(k => k.startsWith(`${op}__`));
+  if (fallbackKey && typedCatalog.traces[fallbackKey]) {
+    return {
+      steps: preserveRecursionBoardState(typedCatalog.traces[fallbackKey], op),
+      engineStatus: 'cpp-precompiled',
+      engineMessage: `Replaying authentic C++ binary execution snapshot (${fallbackKey.replace(`${op}__`, '')})`,
       sourceCode: defaultCode,
     };
   }

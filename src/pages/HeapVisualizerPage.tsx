@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
 import { DualHeapCanvas } from '../components/heaps/DualHeapCanvas';
@@ -15,17 +14,17 @@ import type { TraceStep } from '../types/trace';
 import { Cpu, AlertCircle } from 'lucide-react';
 
 interface HeapVisualizerPageProps {
-  heapType?: 'min' | 'max';
+  heapType: 'min' | 'max';
 }
 
-export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({ heapType: propHeapType }) => {
-  const location = useLocation();
+export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({
+  heapType
+}) => {
+  const [activeHeapType, setActiveHeapType] = useState<'min' | 'max'>(heapType);
 
-  const activeHeapType: 'min' | 'max' = useMemo(() => {
-    if (propHeapType) return propHeapType;
-    if (location.pathname.includes('max-heap')) return 'max';
-    return 'min';
-  }, [propHeapType, location.pathname]);
+  useEffect(() => {
+    setActiveHeapType(heapType);
+  }, [heapType]);
 
   const metaKey = activeHeapType === 'min' ? 'min-heap' : 'max-heap';
   const meta = ALGORITHMS_METADATA[metaKey];
@@ -34,6 +33,7 @@ export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({ heapType
   const [inputArrayStr, setInputArrayStr] = useState<string>(defaultArrayStr);
   const [activeOp, setActiveOp] = useState<string>(`${activeHeapType}-heap-build`);
   const [insertVal, setInsertVal] = useState<number>(activeHeapType === 'min' ? 1 : 25);
+  const [execCount, setExecCount] = useState<number>(0);
   const validationResult = useMemo(() => parseArrayInput(inputArrayStr), [inputArrayStr]);
   const errorMessage = validationResult.error ?? null;
 
@@ -41,6 +41,20 @@ export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({ heapType
   const [cppSourceCode, setCppSourceCode] = useState<string>('');
   const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('cpp-precompiled');
   const [engineMessage, setEngineMessage] = useState<string>('');
+
+  const playback = usePlayback({
+    steps: traceSteps,
+    initialSpeed: 1
+  });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
 
   useEffect(() => {
     if (validationResult.error) return;
@@ -52,25 +66,26 @@ export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({ heapType
         setCppSourceCode(result.sourceCode);
         setEngineStatus(result.engineStatus);
         setEngineMessage(result.engineMessage);
+        if (result.steps.length > 1) {
+          resetRef.current();
+          setTimeout(() => {
+            playRef.current();
+          }, 60);
+        }
       }
     });
 
     return () => {
       ignore = true;
     };
-  }, [inputArrayStr, activeOp, insertVal, activeHeapType, validationResult]);
-
-  const playback = usePlayback({
-    steps: traceSteps,
-    initialSpeed: 1
-  });
+  }, [inputArrayStr, activeOp, insertVal, activeHeapType, validationResult, execCount]);
 
   const currentStep = playback.currentStep;
 
   const handleExecuteOperation = (op: string, val?: number) => {
     setActiveOp(op);
     if (val !== undefined) setInsertVal(val);
-    playback.reset();
+    setExecCount(c => c + 1);
   };
 
   return (
@@ -119,7 +134,7 @@ export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({ heapType
           </div>
         )}
 
-        {/* Heap Controls */}
+        {/* Operation Controls */}
         <HeapControls
           heapType={activeHeapType}
           currentInput={inputArrayStr}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
 import { TreeCanvas } from '../components/trees/TreeCanvas';
@@ -23,6 +23,7 @@ export const BstVisualizerPage: React.FC = () => {
   const [activeOp, setActiveOp] = useState<string>('bst-insert');
   const [targetVal, setTargetVal] = useState<number>(25);
   const [insertVal, setInsertVal] = useState<number>(25);
+  const [execCount, setExecCount] = useState<number>(0);
   const validationResult = useMemo(() => parseArrayInput(inputArrayStr), [inputArrayStr]);
   const errorMessage = validationResult.error ?? null;
 
@@ -30,6 +31,20 @@ export const BstVisualizerPage: React.FC = () => {
   const [cppSourceCode, setCppSourceCode] = useState<string>('');
   const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('cpp-precompiled');
   const [engineMessage, setEngineMessage] = useState<string>('');
+
+  const playback = usePlayback({
+    steps: traceSteps,
+    initialSpeed: 1
+  });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
 
   useEffect(() => {
     if (validationResult.error) return;
@@ -41,18 +56,19 @@ export const BstVisualizerPage: React.FC = () => {
         setCppSourceCode(result.sourceCode);
         setEngineStatus(result.engineStatus);
         setEngineMessage(result.engineMessage);
+        if (result.steps.length > 1) {
+          resetRef.current();
+          setTimeout(() => {
+            playRef.current();
+          }, 60);
+        }
       }
     });
 
     return () => {
       ignore = true;
     };
-  }, [inputArrayStr, activeOp, targetVal, insertVal, validationResult]);
-
-  const playback = usePlayback({
-    steps: traceSteps,
-    initialSpeed: 1
-  });
+  }, [inputArrayStr, activeOp, targetVal, insertVal, validationResult, execCount]);
 
   const currentStep = playback.currentStep;
 
@@ -60,7 +76,7 @@ export const BstVisualizerPage: React.FC = () => {
     setActiveOp(op);
     if (target !== undefined) setTargetVal(target);
     if (val !== undefined) setInsertVal(val);
-    playback.reset();
+    setExecCount(c => c + 1);
   };
 
   const isDuplicateRejected = currentStep?.eventType === 'duplicate_rejected' ||
@@ -113,15 +129,15 @@ export const BstVisualizerPage: React.FC = () => {
         )}
 
         {isDuplicateRejected && (
-          <div className="flex items-center gap-2 p-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg">
-            <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+          <div className="flex items-center gap-2 p-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg font-medium">
+            <ShieldAlert className="w-4 h-4 shrink-0 text-amber-600" />
             <span>
-              <strong>Duplicate Key Rejected:</strong> BST invariant policy rejects duplicate keys to ensure unambiguous binary search boundaries. Tree remains unaltered.
+              <strong>Duplicate Key Invariant Policy:</strong> BST strictly rejects insertion of existing key {targetVal}. Standard BST binary invariants require unique keys.
             </span>
           </div>
         )}
 
-        {/* BST Operation & Input Controls */}
+        {/* Operation & Input Controls */}
         <TreeControls
           mode="bst"
           currentInput={inputArrayStr}
@@ -137,16 +153,16 @@ export const BstVisualizerPage: React.FC = () => {
         <TreeCanvas
           currentStep={currentStep}
           title="Binary Search Tree Hierarchy"
-          subtitle="Enforces Left < Node < Right at every level"
+          subtitle="Strict invariant: Left < Node < Right"
         />
 
-        {/* Auxiliary Panels */}
+        {/* Node Details & Traversal Aux Panel */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <NodeDetailsPanel currentStep={currentStep} />
           <TraversalStatePanel currentStep={currentStep} />
         </div>
 
-        {/* Playback Controls */}
+        {/* Playback Controls Strip */}
         <PlaybackControls
           isPlaying={playback.isPlaying}
           currentStepIndex={playback.currentStepIndex}

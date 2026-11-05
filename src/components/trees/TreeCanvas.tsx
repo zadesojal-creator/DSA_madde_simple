@@ -281,9 +281,9 @@ export const TreeCanvas: React.FC<TreeCanvasProps> = ({
             <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
               <HelpCircle className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-800">Tree is Currently Empty</h3>
+            <h3 className="text-sm font-semibold text-slate-800">{currentStep?.title || "Tree is Currently Initializing"}</h3>
             <p className="text-xs text-slate-500 mt-1">
-              Insert a node or initialize from sample data using the controls below to build the tree.
+              {currentStep?.description || "Building binary tree structure step-by-step..."}
             </p>
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VisualizerLayout } from '../../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../../components/workspace/TopicBreadcrumbs';
@@ -16,8 +16,7 @@ import { ALGORITHMS_METADATA } from '../../data/algorithmsMetadata';
 import { executeCppRecursionAlgorithm, type CppEngineStatus } from '../../services/cppExecutionAdapter';
 import type { TraceStep } from '../../types/trace';
 import {
-  Play, RotateCcw, AlertCircle, Cpu, Info, ChevronUp, ChevronDown,
-  GitBranch
+  Play, RotateCcw, AlertCircle, Cpu, Info, ChevronUp, ChevronDown
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -101,44 +100,43 @@ const MAZE_PRESETS: Record<string, { grid: number[][], rows: number, cols: numbe
     rows:6, cols:6, sr:0, sc:0, gr:5, gc:5,
     label: 'Tricky 6×6'
   },
-  unreachable: {
-    grid: [[0,1,0],[0,1,0],[0,1,0]],
-    rows:3, cols:3, sr:0, sc:0, gr:0, gc:2,
-    label: 'Unreachable'
+  noway: {
+    grid: [[0,1,0],[1,1,0],[0,0,0]],
+    rows:3, cols:3, sr:0, sc:0, gr:2, gc:2,
+    label: 'Unsolvable 3×3'
   }
 };
 
-
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Main component
+// Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 interface RecursionAlgorithmPageProps {
   algorithm?: string;
 }
 
-export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ algorithm: algProp }) => {
-  const { algorithmId } = useParams<{ algorithmId: string }>();
+export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({
+  algorithm: propAlgorithm
+}) => {
+  const { algorithm: paramAlgorithm } = useParams<{ algorithm: string }>();
   const navigate = useNavigate();
 
-  const algId = algProp || algorithmId || 'factorial';
+  const algId = propAlgorithm || paramAlgorithm || 'factorial';
   const config = ALGO_CONFIGS[algId];
 
-  // Input state
+  // State
   const [nValue, setNValue] = useState<number>(config?.defaultN ?? 5);
   const [findAll, setFindAll] = useState<boolean>(config?.defaultFindAll ?? false);
   const [mazePreset, setMazePreset] = useState<string>('default');
-  const [mazeRows, setMazeRows] = useState<number>(config?.defaultMazeRows ?? 5);
-  const [mazeCols, setMazeCols] = useState<number>(config?.defaultMazeCols ?? 5);
+  const [mazeRows, setMazeRows] = useState<number>(5);
+  const [mazeCols, setMazeCols] = useState<number>(5);
 
-  // Execution state
   const [steps, setSteps] = useState<TraceStep[]>([]);
-  const [sourceCode, setSourceCode] = useState<string>('// Loading C++ source...');
-  const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('unavailable');
+  const [sourceCode, setSourceCode] = useState<string>('');
+  const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('cpp-precompiled');
   const [engineMessage, setEngineMessage] = useState<string>('');
-  const [isRunning, setIsRunning] = useState(false);
+  const [isRunning, setIsRunning] = useState<boolean>(false);
   const [inputError, setInputError] = useState<string>('');
-  const [isModified, setIsModified] = useState(true);
+  const [isModified, setIsModified] = useState(false);
 
   const playback = usePlayback({
     steps,
@@ -162,29 +160,15 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
     setSpeed
   } = playback;
 
-  const metadata = ALGORITHMS_METADATA[algId];
+  const playRef = useRef(play);
+  const resetRef = useRef(reset);
 
-  // Reset when algorithm changes
   useEffect(() => {
-    if (!config) {
-      navigate('/visualizer/recursion/factorial');
-      return;
-    }
-    const c = ALGO_CONFIGS[algId];
-    if (c) {
-      setNValue(c.defaultN);
-      setFindAll(c.defaultFindAll ?? false);
-      if (algId === 'maze') {
-        setMazePreset('default');
-        setMazeRows(5);
-        setMazeCols(5);
-      }
-    }
-    setSteps([]);
-    setIsModified(true);
-    setInputError('');
-    reset();
-  }, [algId, config, navigate, reset]);
+    playRef.current = play;
+    resetRef.current = reset;
+  }, [play, reset]);
+
+  const metadata = ALGORITHMS_METADATA[algId];
 
   // ── Validation ──
   const validateInput = useCallback((): boolean => {
@@ -219,19 +203,24 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
     return true;
   }, [algId, config, nValue]);
 
-  // ── Execute C++ algorithm ──
-  const handleRun = useCallback(async () => {
-    if (!validateInput()) return;
+  // ── Execute algorithm with specific parameters ──
+  const runAlgorithmWith = useCallback(async (
+    targetAlgId: string,
+    targetN: number,
+    targetFindAll: boolean,
+    targetMazePreset: string,
+    autoPlay = true
+  ) => {
     setIsRunning(true);
     setIsModified(false);
-    reset();
+    setInputError('');
 
     try {
-      let arrStr = String(nValue);
-      let targetVal = nValue;
+      let arrStr = String(targetN);
+      let targetVal = targetN;
 
-      if (algId === 'maze') {
-        const preset = MAZE_PRESETS[mazePreset] || MAZE_PRESETS['default'];
+      if (targetAlgId === 'maze') {
+        const preset = MAZE_PRESETS[targetMazePreset] || MAZE_PRESETS['default'];
         const flat = preset.grid.flat().join(',');
         arrStr = `${preset.rows};${preset.cols};${flat};${preset.sr};${preset.sc};${preset.gr};${preset.gc}`;
         setMazeRows(preset.rows);
@@ -240,10 +229,10 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
       }
 
       const result = await executeCppRecursionAlgorithm(
-        algId,
+        targetAlgId,
         arrStr,
         targetVal,
-        { findAll }
+        { findAll: targetFindAll }
       );
 
       setSteps(result.steps);
@@ -251,20 +240,48 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
       setEngineStatus(result.engineStatus);
       setEngineMessage(result.engineMessage);
 
-      if (result.steps.length > 0) goToStep(0);
+      if (result.steps.length > 1 && autoPlay) {
+        resetRef.current();
+        setTimeout(() => {
+          playRef.current();
+        }, 60);
+      } else {
+        resetRef.current();
+      }
     } catch (err) {
       console.error('C++ execution error:', err);
-      setInputError('C++ execution failed. Check that the dev server is running.');
+      setInputError('C++ execution failed. Check that the trace service is available.');
     } finally {
       setIsRunning(false);
     }
-  }, [algId, nValue, findAll, mazePreset, validateInput, reset, goToStep]);
+  }, []);
 
-  // Auto-run on first mount with defaults
+  // When algId changes, initialize defaults and immediately run with those defaults
   useEffect(() => {
-    handleRun();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [algId]);
+    if (!config) {
+      navigate('/visualizer/recursion/factorial');
+      return;
+    }
+    const c = ALGO_CONFIGS[algId];
+    if (c) {
+      const initialN = c.defaultN;
+      const initialFindAll = c.defaultFindAll ?? false;
+      const initialPreset = 'default';
+      setNValue(initialN);
+      setFindAll(initialFindAll);
+      if (algId === 'maze') {
+        setMazePreset(initialPreset);
+        setMazeRows(5);
+        setMazeCols(5);
+      }
+      void runAlgorithmWith(algId, initialN, initialFindAll, initialPreset, true);
+    }
+  }, [algId, config, navigate, runAlgorithmWith]);
+
+  const handleRun = () => {
+    if (!validateInput()) return;
+    void runAlgorithmWith(algId, nValue, findAll, mazePreset, true);
+  };
 
   if (!config) return null;
 
@@ -278,104 +295,224 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
 
   return (
     <VisualizerLayout activeTitle={`${config.title} Visualizer`}>
-      <div className="flex flex-col gap-5 max-w-7xl mx-auto w-full pb-12">
-        <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="space-y-6">
+
+        {/* Breadcrumb Header */}
+        <div className="space-y-1.5 border-b border-slate-200 pb-4">
           <TopicBreadcrumbs
-            categoryName={config.category === 'backtracking' ? 'Backtracking' : 'Recursion'}
-            categoryRoute={config.category === 'backtracking' ? '/visualizer/backtracking' : '/visualizer/recursion'}
+            categoryName={config.category === 'recursion' ? 'Recursion' : 'Backtracking'}
+            categoryRoute={config.category === 'recursion' ? '/visualizer/recursion' : '/visualizer/backtracking'}
             subtopicName={config.title}
           />
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-[11px] font-bold ${
-              engineStatus === 'cpp-native'
-                ? 'bg-emerald-950/60 border-emerald-700 text-emerald-300'
-                : engineStatus === 'cpp-precompiled'
-                ? 'bg-cyan-950/60 border-cyan-700 text-cyan-300'
-                : 'bg-rose-950/60 border-rose-700 text-rose-300'
-            }`}>
-              <Cpu className="w-3 h-3" />
-              {engineStatus === 'cpp-native' ? 'C++ Live' : engineStatus === 'cpp-precompiled' ? 'C++ Cached' : 'Offline'}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                <span>{config.title} Visualizer</span>
+                <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200 font-semibold flex items-center gap-1">
+                  <Cpu className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>C++ Trace Engine</span>
+                </span>
+              </h1>
+              {metadata && (
+                <p className="text-xs sm:text-sm text-slate-600 pt-1 max-w-3xl">
+                  {metadata.detailedDescription}
+                </p>
+              )}
+            </div>
+
+            {/* Engine Status Badge */}
+            <div className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-mono text-slate-700">
+              <span className={`w-2 h-2 rounded-full ${
+                engineStatus === 'cpp-native'
+                  ? 'bg-emerald-500 animate-pulse'
+                  : engineStatus === 'cpp-precompiled'
+                  ? 'bg-indigo-500'
+                  : 'bg-amber-500'
+              }`} />
+              <span className="text-[11px] font-sans font-medium">{engineMessage || 'C++ Ready'}</span>
             </div>
           </div>
         </div>
 
-        {/* Input Controls */}
+        {/* Algorithm Quick Switcher Tabs */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-100">
+          <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0 mr-2">Algorithms:</span>
+          {Object.values(ALGO_CONFIGS).map(alg => (
+            <button
+              key={alg.id}
+              onClick={() => {
+                const route = alg.category === 'recursion'
+                  ? `/visualizer/recursion/${alg.id}`
+                  : `/visualizer/backtracking/${alg.id}`;
+                navigate(route);
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition-all ${
+                alg.id === algId
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
+            >
+              {alg.title}
+            </button>
+          ))}
+        </div>
+
+        {/* Input & Control Bar */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <span className="text-sm font-bold text-slate-800 flex items-center gap-2">
-              <GitBranch className="w-4 h-4 text-indigo-500" />
-              {config.title} — Input
-            </span>
-            {steps.length > 0 && (
-              <div className="flex items-center gap-2 text-xs text-slate-500 font-mono">
-                <span>{steps.length} trace steps</span>
-                {totalCalls > 0 && <span>· {totalCalls} function calls</span>}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Execution Parameters</h2>
+              <p className="text-xs text-slate-500">Configure parameters and run the C++ execution tracer.</p>
+            </div>
+            {/* Quick Presets (where applicable) */}
+            {isQueens && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-400 font-medium">Presets:</span>
+                {[4, 6, 8].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => {
+                      setNValue(n);
+                      setIsModified(true);
+                      void runAlgorithmWith(algId, n, findAll, mazePreset, true);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border font-mono font-bold text-xs transition-colors ${
+                      nValue === n
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    N={n}
+                  </button>
+                ))}
+              </div>
+            )}
+            {isHanoi && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-slate-400 font-medium">Presets:</span>
+                {[2, 3, 4, 5].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => {
+                      setNValue(n);
+                      setIsModified(true);
+                      void runAlgorithmWith(algId, n, findAll, mazePreset, true);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border font-mono font-bold text-xs transition-colors ${
+                      nValue === n
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    {n} Disks
+                  </button>
+                ))}
+              </div>
+            )}
+            {isMaze && (
+              <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                <span className="text-slate-400 font-medium">Presets:</span>
+                {Object.entries(MAZE_PRESETS).map(([key, p]) => (
+                  <button
+                    key={key}
+                    onClick={() => {
+                      setMazePreset(key);
+                      setMazeRows(p.rows);
+                      setMazeCols(p.cols);
+                      setIsModified(true);
+                      void runAlgorithmWith(algId, nValue, findAll, key, true);
+                    }}
+                    className={`px-2 py-0.5 rounded-lg border font-mono text-xs transition-colors ${
+                      mazePreset === key
+                        ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
               </div>
             )}
           </div>
 
-          <div className="flex flex-wrap items-end gap-4">
-            {/* Numeric input for most algorithms */}
+          {/* Input Controls Row */}
+          <div className="flex flex-wrap items-center gap-4 pt-1">
+            {/* Number Input (Fact, Fib, Hanoi, Queens) */}
             {!isMaze && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">{config.inputLabel}</label>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => { setNValue(v => Math.max(config.minN, v - 1)); setIsModified(true); }}
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                  >
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold text-slate-700 whitespace-nowrap">
+                  {config.inputLabel}:
+                </label>
+                <div className="flex items-center">
                   <input
                     type="number"
-                    value={nValue}
                     min={config.minN}
                     max={config.maxN}
-                    onChange={e => { setNValue(Number(e.target.value)); setIsModified(true); setInputError(''); }}
-                    className="w-20 px-3 py-2 text-center bg-white border border-slate-300 rounded-xl font-mono font-bold text-slate-800 text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    value={nValue}
+                    onChange={(e) => {
+                      setNValue(Number(e.target.value));
+                      setIsModified(true);
+                      setInputError('');
+                    }}
+                    className="w-20 px-3 py-1.5 text-sm font-mono font-bold border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-600"
                   />
-                  <button
-                    onClick={() => { setNValue(v => Math.min(config.maxN, v + 1)); setIsModified(true); }}
-                    className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
-                  >
-                    <ChevronUp className="w-4 h-4" />
-                  </button>
-                  <span className="text-[11px] text-slate-500">({config.minN}–{config.maxN})</span>
+                  <div className="flex flex-col ml-1">
+                    <button
+                      onClick={() => {
+                        if (nValue < config.maxN) {
+                          const nextVal = nValue + 1;
+                          setNValue(nextVal);
+                          setIsModified(true);
+                          void runAlgorithmWith(algId, nextVal, findAll, mazePreset, true);
+                        }
+                      }}
+                      disabled={nValue >= config.maxN}
+                      className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (nValue > config.minN) {
+                          const nextVal = nValue - 1;
+                          setNValue(nextVal);
+                          setIsModified(true);
+                          void runAlgorithmWith(algId, nextVal, findAll, mazePreset, true);
+                        }
+                      }}
+                      disabled={nValue <= config.minN}
+                      className="p-0.5 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Maze preset selector */}
-            {isMaze && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Maze Preset</label>
-                <select
-                  value={mazePreset}
-                  onChange={e => { setMazePreset(e.target.value); setIsModified(true); }}
-                  className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {Object.entries(MAZE_PRESETS).map(([key, p]) => (
-                    <option key={key} value={key}>{p.label}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* N-Queens find-all toggle */}
-            {isQueens && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">Mode</label>
-                <div className="flex gap-2">
+            {/* Find All Solutions Toggle for N-Queens */}
+            {config.showFindAll && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-700">Mode:</span>
+                <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
                   <button
-                    onClick={() => { setFindAll(false); setIsModified(true); }}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      !findAll ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    onClick={() => {
+                      setFindAll(false);
+                      setIsModified(true);
+                      void runAlgorithmWith(algId, nValue, false, mazePreset, true);
+                    }}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      !findAll ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                   >First Solution</button>
                   <button
-                    onClick={() => { setFindAll(true); setIsModified(true); }}
-                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      findAll ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-50'
+                    onClick={() => {
+                      setFindAll(true);
+                      setIsModified(true);
+                      void runAlgorithmWith(algId, nValue, true, mazePreset, true);
+                    }}
+                    className={`px-3 py-1 font-semibold transition-colors ${
+                      findAll ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
                     }`}
                   >All Solutions</button>
                 </div>
@@ -428,108 +565,135 @@ export const RecursionAlgorithmPage: React.FC<RecursionAlgorithmPageProps> = ({ 
           {/* Canvas (left 2/3) */}
           <div className="xl:col-span-2 flex flex-col gap-4">
             {/* Algorithm-specific canvas */}
-            {isHanoi && <HanoiCanvas currentStep={currentStep} numDisks={nValue} />}
-            {isMaze  && <MazeCanvas  currentStep={currentStep} rows={mazeRows} cols={mazeCols} />}
-            {isQueens && <NQueensBoard currentStep={currentStep} n={nValue} />}
-
-            {/* Factorial / Fibonacci: show recursion tree diagram note */}
-            {(isFact || isFib) && (
-              <div className="relative w-full bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-slate-800 shadow-xl p-6 overflow-hidden" style={{ minHeight: 220 }}>
-                <div className="absolute inset-0 opacity-[0.04] pointer-events-none"
-                  style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, #fff 1px, transparent 0)', backgroundSize: '28px 28px' }}
-                />
-                <div className="relative z-10 flex flex-col items-center justify-center h-full gap-4 text-center">
-                  <GitBranch className="w-10 h-10 text-indigo-400 opacity-60" />
-                  <div className="space-y-1">
-                    <p className="text-slate-200 font-bold">
-                      {isFact ? `factorial(${nValue})` : `fibonacci(${nValue})`} Recursion
-                    </p>
-                    {currentStep && (
-                      <p className="text-indigo-300 font-mono text-sm">
-                        Current: {currentStep.callStack?.[currentStep.callStack.length - 1] ?? '—'}
-                      </p>
-                    )}
-                    <p className="text-slate-500 text-xs mt-2">
-                      Step-through the call stack panel to follow the recursion tree.
-                    </p>
-                    {currentStep?.variables?.['return'] && (
-                      <div className="mt-3 px-4 py-2 rounded-xl bg-emerald-950/60 border border-emerald-700 inline-block">
-                        <span className="text-slate-400 text-xs font-mono">return → </span>
-                        <span className="text-emerald-300 font-mono font-bold text-lg">
-                          {currentStep.variables['return']}
-                        </span>
-                      </div>
-                    )}
+            {isFact && (
+              <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 flex flex-col items-center justify-center min-h-[300px]">
+                <div className="text-center space-y-3">
+                  <div className="text-slate-400 text-xs font-mono uppercase tracking-wider">Factorial Computation (n!)</div>
+                  <div className="text-4xl font-extrabold text-white font-mono">
+                    {nValue}! = {currentStep?.variables?.['result'] || currentStep?.variables?.['return'] || '...'}
                   </div>
-                  {/* Completed result */}
-                  {steps.length > 0 && steps[steps.length - 1]?.variables?.['result'] && (
-                    <div className="px-5 py-3 rounded-2xl bg-indigo-950/70 border border-indigo-700">
-                      <p className="text-slate-400 text-xs">Final Result</p>
-                      <p className="text-indigo-200 font-mono font-bold text-2xl">
-                        {isFact ? `${nValue}! = ` : `fib(${nValue}) = `}
-                        {steps[steps.length - 1].variables?.['result']}
-                      </p>
-                      {isFib && (
-                        <p className="text-purple-400 text-xs font-mono mt-1">
-                          Total function calls: {totalCalls}
-                        </p>
-                      )}
+                  <div className="text-slate-400 text-sm max-w-md">
+                    {currentStep?.description || `Computing ${nValue}! recursively...`}
+                  </div>
+                  {currentStep?.variables?.['sub'] !== undefined && currentStep?.variables?.['n'] !== undefined && (
+                    <div className="inline-block px-4 py-2 bg-indigo-950/80 border border-indigo-700/60 rounded-xl text-indigo-300 font-mono text-sm">
+                      Returning {currentStep.variables['n']} × {currentStep.variables['sub']} = {currentStep.variables['return']}
                     </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* Playback controls */}
-            <PlaybackControls
-              currentStepIndex={currentStepIndex}
-              totalSteps={totalSteps}
-              isPlaying={isPlaying}
-              speed={speed}
-              isAtStart={isAtStart}
-              isAtEnd={isAtEnd}
-              onPlay={play}
-              onPause={pause}
-              onTogglePlay={togglePlay}
-              onNext={nextStep}
-              onPrev={prevStep}
-              onReset={() => { reset(); goToStep(0); }}
-              onSpeedChange={setSpeed}
-              onGoToStep={goToStep}
-            />
+            {isFib && (
+              <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 flex flex-col items-center justify-center min-h-[300px]">
+                <div className="text-center space-y-3">
+                  <div className="text-slate-400 text-xs font-mono uppercase tracking-wider">Fibonacci Sequence Value</div>
+                  <div className="text-4xl font-extrabold text-white font-mono">
+                    fib({nValue}) = {currentStep?.variables?.['result'] || currentStep?.variables?.['return'] || '...'}
+                  </div>
+                  <div className="text-slate-400 text-sm max-w-md">
+                    {currentStep?.description || `Computing fib(${nValue}) via branch recursion...`}
+                  </div>
+                  <div className="flex gap-3 justify-center text-xs font-mono text-slate-400 pt-2">
+                    <span className="px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-700">
+                      Depth: <strong className="text-indigo-400">{currentStep?.recursionDepth ?? 0}</strong>
+                    </span>
+                    <span className="px-3 py-1.5 bg-slate-800 rounded-lg border border-slate-700">
+                      Total calls: <strong className="text-amber-400">{totalCalls}</strong>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
-            {/* Step explanation */}
-            {currentStep && <StepExplanation currentStep={currentStep} totalSteps={totalSteps} />}
+            {isHanoi && (
+              <HanoiCanvas
+                currentStep={currentStep}
+                numDisks={nValue}
+              />
+            )}
+
+            {isMaze && (
+              <MazeCanvas
+                currentStep={currentStep}
+                rows={mazeRows}
+                cols={mazeCols}
+              />
+            )}
+
+            {isQueens && (
+              <NQueensBoard
+                currentStep={currentStep}
+                n={nValue}
+              />
+            )}
+
+            {/* Recursion State Summary Panel */}
+            <RecursionStatePanel
+              currentStep={currentStep}
+              algorithmId={algId}
+            />
           </div>
 
-          {/* Right panel (1/3) */}
+          {/* Call Stack Sidebar (right 1/3) */}
           <div className="flex flex-col gap-4">
-            {/* Call stack */}
-            <CallStackPanel currentStep={currentStep} algorithmId={algId} />
+            <CallStackPanel
+              currentStep={currentStep}
+              algorithmId={algId}
+            />
+          </div>
+        </div>
 
-            {/* Execution state */}
-            <RecursionStatePanel currentStep={currentStep} algorithmId={algId} />
+        {/* Playback Controls Strip */}
+        <PlaybackControls
+          isPlaying={isPlaying}
+          currentStepIndex={currentStepIndex}
+          totalSteps={totalSteps}
+          speed={speed}
+          isAtStart={isAtStart}
+          isAtEnd={isAtEnd}
+          onPlay={play}
+          onPause={pause}
+          onTogglePlay={togglePlay}
+          onNext={nextStep}
+          onPrev={prevStep}
+          onReset={reset}
+          onGoToStep={goToStep}
+          onSpeedChange={setSpeed}
+        />
 
-            {/* Complexity */}
+        {/* Step Explanation Card */}
+        <StepExplanation
+          currentStep={currentStep}
+          totalSteps={totalSteps}
+        />
+
+        {/* Code & Complexity Analysis Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-7 space-y-2">
+            <PseudocodePanel
+              lines={sourceCode ? sourceCode.split('\n') : ['// C++ source code loading...']}
+              activeLine={currentStep?.sourceLine ?? currentStep?.activeLine}
+              title={`${config.title} — Canonical C++ Implementation`}
+              language="C++ (ISO C++17 Single Source of Truth)"
+            />
+          </div>
+
+          <div className="lg:col-span-5 space-y-2">
             {metadata && (
               <ComplexityPanel
                 complexity={metadata.complexity}
                 observedCounters={{
-                  recursionDepth: currentStep?.recursionDepth,
-                  passNumber: currentStep?.passNumber
+                  comparisons: currentStep?.comparisons,
+                  swaps: currentStep?.swaps,
+                  writes: currentStep?.writes,
+                  passNumber: currentStep?.passNumber,
+                  recursionDepth: currentStep?.recursionDepth
                 }}
               />
             )}
           </div>
         </div>
-
-        {/* Source code (full width) */}
-        <PseudocodePanel
-          lines={sourceCode ? sourceCode.split('\n') : []}
-          activeLine={currentStep?.activeLine}
-          language="C++"
-          title={`C++ Source — ${config.title}`}
-        />
 
       </div>
     </VisualizerLayout>

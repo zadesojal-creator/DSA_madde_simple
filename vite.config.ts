@@ -5,7 +5,8 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 
 function cppExecutionPlugin(): Plugin {
-  const binaryPath = path.resolve(process.cwd(), 'cpp/bin/array_tracer.exe');
+  const binaryName = process.platform === 'win32' ? 'array_tracer.exe' : 'array_tracer';
+  const binaryPath = path.resolve(process.cwd(), 'cpp/bin', binaryName);
 
   const handleApiRequest = (req: any, res: any) => {
     const parsedUrl = new URL(req.url, 'http://localhost');

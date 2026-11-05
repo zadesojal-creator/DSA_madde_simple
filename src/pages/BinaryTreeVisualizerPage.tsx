@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
 import { TreeCanvas } from '../components/trees/TreeCanvas';
@@ -20,6 +20,7 @@ export const BinaryTreeVisualizerPage: React.FC = () => {
   const [activeOp, setActiveOp] = useState<string>('tree-build');
   const [targetVal, setTargetVal] = useState<number>(0);
   const [insertVal, setInsertVal] = useState<number>(99);
+  const [execCount, setExecCount] = useState<number>(0);
   const validationResult = useMemo(() => parseTreeTokensInput(inputTokens), [inputTokens]);
   const errorMessage = validationResult.error ?? null;
 
@@ -27,6 +28,20 @@ export const BinaryTreeVisualizerPage: React.FC = () => {
   const [cppSourceCode, setCppSourceCode] = useState<string>('');
   const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('cpp-precompiled');
   const [engineMessage, setEngineMessage] = useState<string>('');
+
+  const playback = usePlayback({
+    steps: traceSteps,
+    initialSpeed: 1
+  });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
 
   // Execute C++ algorithm whenever operation or input changes
   useEffect(() => {
@@ -39,18 +54,19 @@ export const BinaryTreeVisualizerPage: React.FC = () => {
         setCppSourceCode(result.sourceCode);
         setEngineStatus(result.engineStatus);
         setEngineMessage(result.engineMessage);
+        if (result.steps.length > 1) {
+          resetRef.current();
+          setTimeout(() => {
+            playRef.current();
+          }, 60);
+        }
       }
     });
 
     return () => {
       ignore = true;
     };
-  }, [validationResult, activeOp, targetVal, insertVal]);
-
-  const playback = usePlayback({
-    steps: traceSteps,
-    initialSpeed: 1
-  });
+  }, [validationResult, activeOp, targetVal, insertVal, execCount]);
 
   const currentStep = playback.currentStep;
 
@@ -58,7 +74,7 @@ export const BinaryTreeVisualizerPage: React.FC = () => {
     setActiveOp(op);
     if (target !== undefined) setTargetVal(target);
     if (val !== undefined) setInsertVal(val);
-    playback.reset();
+    setExecCount(c => c + 1);
   };
 
   return (
