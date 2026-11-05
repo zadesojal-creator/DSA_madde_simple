@@ -4,13 +4,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: >-
-      mkdir -p cpp/bin &&
-      g++ -std=c++17 -O2 -Icpp/include cpp/src/main.cpp cpp/src/algorithms.cpp
-      cpp/src/searching_sorting.cpp cpp/src/stack_algorithms.cpp
-      cpp/src/tree_heap_algorithms.cpp cpp/src/graph_algorithms.cpp
-      cpp/src/recursion_algorithms.cpp -o cpp/bin/array_tracer &&
-      npm --prefix server install
+    buildCommand: npm install && npm run build && node scripts/build_cpp.js && npm --prefix server install
     startCommand: node server/index.js
     envVars:
       - key: NODE_VERSION
@@ -21,9 +15,14 @@ services:
   - type: web
     name: dsa-visualizer-web
     runtime: static
+    plan: free
     rootDir: .
     buildCommand: npm install && npm run build
     staticPublishPath: ./dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
         value: https://dsa-visualizer-api.onrender.com

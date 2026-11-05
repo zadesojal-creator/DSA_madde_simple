@@ -3,14 +3,22 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:cpp": "node scripts/build_cpp.js",
+    "build:server": "npm --prefix server install",
+    "render-build": "npm install && npm run build && node scripts/build_cpp.js && npm --prefix server install",
+    "start": "node server/index.js",
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
+    "express": "^5.1.0",
     "lucide-react": "^1.54.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

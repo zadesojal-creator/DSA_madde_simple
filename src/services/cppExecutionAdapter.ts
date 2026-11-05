@@ -3,6 +3,9 @@ import cppTracesData from '../data/cppGeneratedTraces.json';
 
 export type CppEngineStatus = 'cpp-native' | 'cpp-precompiled' | 'unavailable';
 
+const cppApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
+const cppApiUrl = (endpoint: 'cpp-trace' | 'cpp-code') => `${cppApiBaseUrl}/api/${endpoint}`;
+
 export interface CppExecutionResult {
   steps: TraceStep[];
   engineStatus: CppEngineStatus;
@@ -36,7 +39,7 @@ export async function executeCppLinearStructure(
   });
   let response: Response;
   try {
-    response = await fetch(`/api/cpp-trace?${query.toString()}`);
+    response = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
@@ -53,8 +56,8 @@ export async function executeCppLinearStructure(
         isCompleted: true
       }],
       engineStatus: 'unavailable',
-      engineMessage: 'Run the Vite development server to use native C++ execution.',
-      sourceCode: '// Native C++ source is available when the local trace server is running.',
+      engineMessage: 'The C++ trace service is unavailable. Try again when the service is online.',
+      sourceCode: '// Native C++ source is available when the C++ trace service is running.',
       isError: true
     };
   }
@@ -76,13 +79,13 @@ export async function executeCppLinearStructure(
       }],
       engineStatus: 'unavailable',
       engineMessage: `Native C++ process returned HTTP ${response.status}.`,
-      sourceCode: '// Native C++ source is available when the local trace server is running.',
+      sourceCode: '// Native C++ source is available when the C++ trace service is running.',
       isError: true
     };
   }
 
   const steps = await response.json() as TraceStep[];
-  const codeResponse = await fetch(`/api/cpp-code?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(params.structure ?? 'singly')}`);
+  const codeResponse = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(params.structure ?? 'singly')}`);
   const sourceCode = codeResponse.ok ? await codeResponse.text() : '// Failed to retrieve C++ source code';
   return {
     steps,
@@ -201,14 +204,14 @@ export async function executeCppAlgorithm(
     }
     const query = new URLSearchParams(queryParams);
 
-    const res = await fetch(`/api/cpp-trace?${query.toString()}`);
+    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       
       // Fetch fresh source code if possible
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`/api/cpp-code?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
         if (codeRes.ok) {
           sourceCode = await codeRes.text();
         }
@@ -219,7 +222,7 @@ export async function executeCppAlgorithm(
       return {
         steps,
         engineStatus: 'cpp-native',
-        engineMessage: 'Executed live via native C++ binary (array_tracer.exe)',
+        engineMessage: 'Executed live by the native C++ trace runner.',
         sourceCode
       };
     }
@@ -244,7 +247,7 @@ export async function executeCppAlgorithm(
         id: 0,
         stepIndex: 0,
         title: 'C++ Execution Engine Notice',
-        description: `Custom data [${arrStr}] requires the local C++ runner. Please ensure the dev server is running ('npm run dev') to execute native C++ for custom inputs.`,
+        description: `Custom data [${arrStr}] requires a reachable C++ trace service. Try again when the service is available.`,
         activeLine: 1,
         sourceLine: 1,
         arrayState: [],
@@ -257,7 +260,7 @@ export async function executeCppAlgorithm(
       }
     ],
     engineStatus: 'unavailable',
-    engineMessage: 'C++ local server is offline. Run "npm run dev" to execute native C++ for custom inputs.',
+    engineMessage: 'The C++ trace service is unavailable for custom inputs.',
     sourceCode: defaultCode,
     isError: true
   };
@@ -326,6 +329,51 @@ export function validateGraphInput(
   return { valid: true };
 }
 
+function matchesCachedGraph(
+  op: string,
+  steps: TraceStep[],
+  edgeTokens: string,
+  params: GraphExecutionParams
+): boolean {
+  const firstStep = steps[0];
+  if (
+    !firstStep?.graphVertices?.length ||
+    !firstStep.graphEdges ||
+    params.source === undefined ||
+    params.vertices === undefined ||
+    params.directed === undefined ||
+    params.weighted === undefined ||
+    (firstStep.activeVertexId !== params.source && !(op === 'floyd-warshall' && params.source === 0)) ||
+    firstStep.graphVertices.length !== params.vertices
+  ) {
+    return false;
+  }
+
+  const expectedEdges = edgeTokens.split(',').filter(Boolean).map((token) => {
+    const [vertices, weightToken] = token.trim().split(':');
+    const [uToken, vToken] = vertices.split('-');
+    const u = Number(uToken);
+    const v = Number(vToken);
+    const weight = params.weighted && weightToken !== undefined ? Number(weightToken) : 1;
+    return {
+      u: params.directed ? u : Math.min(u, v),
+      v: params.directed ? v : Math.max(u, v),
+      weight,
+      directed: params.directed
+    };
+  });
+  const actualEdges = firstStep.graphEdges.map((edge) => ({
+    u: edge.directed ? edge.u : Math.min(edge.u, edge.v),
+    v: edge.directed ? edge.v : Math.max(edge.u, edge.v),
+    weight: edge.weight,
+    directed: edge.directed
+  }));
+  const sortEdges = (edges: typeof expectedEdges) =>
+    edges.sort((a, b) => a.u - b.u || a.v - b.v || a.weight - b.weight);
+
+  return JSON.stringify(sortEdges(expectedEdges)) === JSON.stringify(sortEdges(actualEdges));
+}
+
 /**
  * Executes a Graph algorithm through the native C++ binary or authentic precompiled snapshot
  */
@@ -338,6 +386,14 @@ export async function executeCppGraphAlgorithm(
   const source = params.source !== undefined ? params.source : 0;
   const arrStr = edgeTokens.trim() || 'sample';
   const cacheKey = `${op}__${arrStr}__${target}`;
+  const directTrace = typedCatalog.traces[cacheKey];
+  const sampleTrace = typedCatalog.traces[`${op}__sample__${target}`];
+  const cachedTrace = directTrace &&
+    (directTrace[0]?.activeVertexId === source || (op === 'floyd-warshall' && source === 0))
+    ? directTrace
+    : arrStr !== 'sample' && sampleTrace && matchesCachedGraph(op, sampleTrace, arrStr, { ...params, source })
+      ? sampleTrace
+      : undefined;
   const defaultCode = typedCatalog.codes[op] || '// C++ source code not available';
 
   // 1. Attempt live execution via Vite native C++ server endpoint
@@ -359,12 +415,12 @@ export async function executeCppGraphAlgorithm(
     }
 
     const query = new URLSearchParams(queryParams);
-    const res = await fetch(`/api/cpp-trace?${query.toString()}`);
+    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`/api/cpp-code?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
         if (codeRes.ok) {
           sourceCode = await codeRes.text();
         }
@@ -375,7 +431,7 @@ export async function executeCppGraphAlgorithm(
       return {
         steps,
         engineStatus: 'cpp-native',
-        engineMessage: 'Executed live via native C++ binary (array_tracer.exe)',
+        engineMessage: 'Executed live by the native C++ trace runner.',
         sourceCode
       };
     }
@@ -384,9 +440,9 @@ export async function executeCppGraphAlgorithm(
   }
 
   // 2. Authentic precompiled C++ trace cache
-  if (typedCatalog.traces[cacheKey]) {
+  if (cachedTrace) {
     return {
-      steps: typedCatalog.traces[cacheKey],
+      steps: cachedTrace,
       engineStatus: 'cpp-precompiled',
       engineMessage: 'Replaying authentic C++ binary execution snapshot',
       sourceCode: defaultCode
@@ -400,7 +456,7 @@ export async function executeCppGraphAlgorithm(
         id: 0,
         stepIndex: 0,
         title: 'C++ Execution Engine Notice',
-        description: `Custom graph input [${arrStr}] requires the local C++ runner. Please ensure the dev server is running ('npm run dev') to execute native C++ for custom graphs.`,
+        description: `Custom graph input [${arrStr}] requires a reachable C++ trace service. Try again when the service is available.`,
         activeLine: 1,
         sourceLine: 1,
         arrayState: [],
@@ -413,7 +469,7 @@ export async function executeCppGraphAlgorithm(
       }
     ],
     engineStatus: 'unavailable',
-    engineMessage: 'C++ local server is offline. Run "npm run dev" to execute native C++ for custom graphs.',
+    engineMessage: 'The C++ trace service is unavailable for custom graphs.',
     sourceCode: defaultCode,
     isError: true
   };
@@ -454,18 +510,18 @@ export async function executeCppRecursionAlgorithm(
     }
 
     const query = new URLSearchParams(queryParams);
-    const res = await fetch(`/api/cpp-trace?${query.toString()}`);
+    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`/api/cpp-code?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
         if (codeRes.ok) sourceCode = await codeRes.text();
       } catch { /* fall back */ }
       return {
         steps,
         engineStatus: 'cpp-native',
-        engineMessage: 'Executed live via native C++ binary (array_tracer.exe)',
+        engineMessage: 'Executed live by the native C++ trace runner.',
         sourceCode,
       };
     }
@@ -486,13 +542,13 @@ export async function executeCppRecursionAlgorithm(
     steps: [{
       id: 0, stepIndex: 0,
       title: 'C++ Execution Engine Offline',
-      description: `Run "npm run dev" to execute native C++ for ${op}. The local C++ runner is required for recursion traces.`,
+      description: `A reachable C++ trace service is required to generate a live ${op} trace. Try again when the service is available.`,
       activeLine: 1, sourceLine: 1,
       arrayState: [], activeIndices: [], highlightedItems: {}, pointers: [],
       variables: { op }, statusText: 'C++ Server Offline', isCompleted: true,
     }],
     engineStatus: 'unavailable',
-    engineMessage: 'C++ local server is offline. Run "npm run dev" to execute native C++.',
+    engineMessage: 'The C++ trace service is unavailable for this custom input.',
     sourceCode: defaultCode,
     isError: true,
   };

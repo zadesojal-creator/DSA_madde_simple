@@ -10,6 +10,7 @@ const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(serverDirectory, '..');
 const binaryName = process.platform === 'win32' ? 'array_tracer.exe' : 'array_tracer';
 const binaryPath = path.join(repositoryRoot, 'cpp', 'bin', binaryName);
+const distPath = path.join(repositoryRoot, 'dist');
 const maxBuffer = 10 * 1024 * 1024;
 
 app.use((req, res, next) => {
@@ -45,7 +46,7 @@ function runCpp(args, res, responseType) {
 
   execFile(binaryPath, args, { maxBuffer }, (error, stdout, stderr) => {
     if (error) {
-      if (error.code === 'ENOENT') {
+      if (error.code === 'ENOENT' || error.code === 'EACCES') {
         missingBinary(res);
         return;
       }
@@ -73,6 +74,14 @@ function runCpp(args, res, responseType) {
   });
 }
 
+// Health check endpoints for Render and uptime monitoring
+app.get(['/health', '/api/health'], (req, res) => {
+  res.json({
+    status: 'ok',
+    binaryAvailable: existsSync(binaryPath),
+  });
+});
+
 app.get('/api/cpp-trace', (req, res) => {
   const op = queryParam(req, 'op') || 'bubble-sort';
   const providedArr = queryParam(req, 'arr');
@@ -96,6 +105,27 @@ app.get('/api/cpp-code', (req, res) => {
   const structure = queryParam(req, 'structure') || 'singly';
   runCpp(['--structure', structure, '--code', op], res, 'text');
 });
+
+// Serve frontend static assets and handle client-side SPA routing if dist exists
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.use((req, res, next) => {
+    if (req.method === 'GET' && !req.path.startsWith('/api')) {
+      return res.sendFile(path.join(distPath, 'index.html'));
+    }
+    next();
+  });
+} else {
+  // If running in API-only mode, provide a friendly root response
+  app.get('/', (req, res) => {
+    res.json({
+      service: 'DSA Visualizer API',
+      status: 'online',
+      cppBinary: existsSync(binaryPath) ? 'available' : 'missing',
+      endpoints: ['/health', '/api/health', '/api/cpp-trace', '/api/cpp-code'],
+    });
+  });
+}
 
 app.listen(port, '0.0.0.0', () => {
   console.log(`C++ trace API listening on port ${port}`);

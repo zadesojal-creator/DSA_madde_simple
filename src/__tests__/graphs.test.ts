@@ -68,6 +68,19 @@ describe('Graph Algorithms Visualizer (C++ Single Source of Truth)', () => {
       expect(v0?.distance).toBe(0);
       expect(v5?.distance).toBe(3);
     });
+
+    it('uses the bundled sample trace for the matching default graph when the C++ service is offline', async () => {
+      const res = await executeCppGraphAlgorithm(
+        'bfs',
+        '0-1,0-2,1-3,1-4,2-4,3-5,4-5',
+        { source: 0, target: 5, vertices: 6, directed: false, weighted: false }
+      );
+
+      expect(res.engineStatus).toBe('cpp-precompiled');
+      expect(res.steps.length).toBeGreaterThan(5);
+      expect(res.steps[0].graphVertices).toHaveLength(6);
+      expect(res.steps[res.steps.length - 1].reconstructedPath).toEqual([0, 1, 3, 5]);
+    });
   });
 
   describe('Depth-First Search (DFS)', () => {

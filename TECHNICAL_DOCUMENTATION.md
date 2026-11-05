@@ -97,12 +97,14 @@ Dedicated page components own input state and select the active operation. Share
 
 1. A page validates its input and calls an adapter function in `cppExecutionAdapter.ts`.
 2. The adapter requests `/api/cpp-trace` with operation-specific query parameters.
-3. The `cppExecutionPlugin` in `vite.config.ts` translates those parameters into command-line arguments and launches `cpp/bin/array_tracer.exe` with Node's `execFile`.
+3. In local development, the `cppExecutionPlugin` in `vite.config.ts` translates those parameters into command-line arguments and launches `cpp/bin/array_tracer.exe` with Node's `execFile`. In deployment, `server/index.js` provides the same endpoints and argument mapping while launching the Linux binary at `cpp/bin/array_tracer`.
 4. `cpp/src/main.cpp` parses the arguments, dispatches to the relevant tracer, and serializes emitted events as JSON.
 5. The adapter returns the trace steps and, where available, retrieves canonical source through `/api/cpp-code`.
 6. The visualizer renders the active snapshot and shared playback controls advance through the trace.
 
-The Vite plugin installs these middleware endpoints for both the development server and preview server. Live native execution therefore requires the expected Windows executable at `cpp/bin/array_tracer.exe`.
+The Vite plugin installs these middleware endpoints for both the development server and preview server. Local live native execution requires the Windows executable at `cpp/bin/array_tracer.exe`. Render uses the Express service in `server/`, which compiles the C++ runner during its build; the Linux binary is generated and ignored rather than committed.
+
+Set `VITE_API_BASE_URL` to the backend origin when building the static frontend. It is unset for the default same-origin Vite middleware in local development. `.env.example` shows the local two-service setup. `render.yaml` defines both free Render services; the API service uses the repository root as its Render root directory so its build can access the sibling `cpp/` sources.
 
 ### Offline behavior
 
@@ -162,6 +164,8 @@ Start the frontend and Vite native trace middleware:
 ```powershell
 npm run dev
 ```
+
+For the separately hosted API, start the backend from the repository root with `npm --prefix server start` and set `VITE_API_BASE_URL` to its origin for the frontend. The Render Blueprint builds the Linux runner with C++17 and deploys the frontend as a static site.
 
 Other package scripts:
 

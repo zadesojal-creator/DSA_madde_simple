@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+cpp/bin/array_tracer
+cpp/tests/*.exe
 
 # Editor directories and files
 .vscode/*

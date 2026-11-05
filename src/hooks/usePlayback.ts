@@ -19,12 +19,21 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
   // Active step snapshot
   const currentStep: TraceStep | undefined = steps[currentStepIndex];
 
+  const playFromStart = useCallback((stepCount: number) => {
+    setCurrentStepIndex(0);
+    setIsPlaying(stepCount > 1);
+  }, []);
+
   const play = useCallback(() => {
+    if (totalSteps <= 1) {
+      setIsPlaying(false);
+      return;
+    }
     if (isAtEnd) {
       setCurrentStepIndex(0);
     }
     setIsPlaying(true);
-  }, [isAtEnd]);
+  }, [isAtEnd, totalSteps]);
 
   const pause = useCallback(() => {
     setIsPlaying(false);
@@ -70,19 +79,16 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
 
     const intervalMs = Math.round(1000 / speed);
     timerRef.current = setInterval(() => {
-      setCurrentStepIndex((prev) => {
-        if (prev >= totalSteps - 1) {
-          setIsPlaying(false);
-          return prev;
-        }
-        return prev + 1;
-      });
+      if (currentStepIndex >= totalSteps - 2) {
+        setIsPlaying(false);
+      }
+      setCurrentStepIndex((prev) => Math.min(prev + 1, totalSteps - 1));
     }, intervalMs);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, speed, totalSteps, isAtEnd]);
+  }, [isPlaying, speed, totalSteps, currentStepIndex, isAtEnd]);
 
   // Keyboard Navigation Listener
   useEffect(() => {
@@ -120,6 +126,7 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
     isAtStart,
     isAtEnd,
     play,
+    playFromStart,
     pause,
     togglePlay,
     nextStep,
