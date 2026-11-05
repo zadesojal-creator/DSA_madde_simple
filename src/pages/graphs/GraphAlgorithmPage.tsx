@@ -193,10 +193,10 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     initialSpeed: 1
   });
 
-  const { reset: resetPlayback } = playback;
+  const { reset: resetPlayback, playFromStart } = playback;
 
   // Execute C++ algorithm
-  const runAlgorithmExecution = useCallback(async () => {
+  const runAlgorithmExecution = useCallback(async (autoPlay = true) => {
     // Validate edge tokens
     const edgeTokens = edges.map((e) => `${e.u}-${e.v}${weighted ? `:${e.weight}` : ''}`).join(',');
     const check = validateGraphInput(edgeTokens, vertexCount, weighted, activeAlgorithmId);
@@ -219,12 +219,16 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     setEngineStatus(result.engineStatus);
     setEngineMessage(result.engineMessage);
     setIsModified(false);
-    resetPlayback();
-  }, [edges, weighted, vertexCount, activeAlgorithmId, sourceVertex, targetVertex, directed, resetPlayback]);
+    if (autoPlay && !result.isError) {
+      playFromStart(result.steps.length);
+    } else {
+      resetPlayback();
+    }
+  }, [edges, weighted, vertexCount, activeAlgorithmId, sourceVertex, targetVertex, directed, resetPlayback, playFromStart]);
 
   // Run initial trace on mount or algorithm change
   useEffect(() => {
-    runAlgorithmExecution();
+    void runAlgorithmExecution(false);
   }, [runAlgorithmExecution]);
 
   // Handle graph modification
@@ -253,7 +257,6 @@ export const GraphAlgorithmPage: React.FC<GraphAlgorithmPageProps> = ({ algorith
     setTargetVertex(cfg.target);
     setIsModified(false);
     setValidationError(undefined);
-    runAlgorithmExecution();
   };
 
   const handleLoadSample = (sampleType: string) => {
