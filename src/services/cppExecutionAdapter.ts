@@ -4,7 +4,28 @@ import cppTracesData from '../data/cppGeneratedTraces.json';
 export type CppEngineStatus = 'cpp-native' | 'cpp-precompiled' | 'unavailable';
 
 const cppApiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
-const cppApiUrl = (endpoint: 'cpp-trace' | 'cpp-code') => `${cppApiBaseUrl}/api/${endpoint}`;
+const cppApiUrl = (endpoint: 'cpp-trace' | 'cpp-code' | 'health') => `${cppApiBaseUrl}/api/${endpoint}`;
+
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 6000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(id);
+    return res;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+}
+
+export function warmupCppBackend(): void {
+  try {
+    void fetchWithTimeout(`${cppApiUrl('health')}`, {}, 2000).catch(() => {});
+  } catch {
+    // Ignore warmup errors
+  }
+}
 
 const typedCatalog = (cppTracesData as unknown) as {
   traces: Record<string, TraceStep[]>;
@@ -50,14 +71,25 @@ export async function executeCppLinearStructure(
     target: String(params.target ?? 0)
   });
 
-  // 1. Attempt live execution via C++ runner
+  // 1. Instant precompiled snapshot cache (0ms latency, eliminates Render cold starts)
+  const cached = typedCatalog.traces[exactKey] || typedCatalog.traces[genericKey] || typedCatalog.traces[`${op}__${arrStr}`] || typedCatalog.traces[op];
+  if (cached && cached.length > 0) {
+    return {
+      steps: cached,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      sourceCode: typedCatalog.codes[genericKey] || defaultCode
+    };
+  }
+
+  // 2. Custom input -> Attempt live execution via C++ runner with 6s timeout
   try {
-    const response = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
+    const response = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
     if (response.ok) {
       const steps = (await response.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeResponse = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(structure)}`);
+        const codeResponse = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(structure)}`, {}, 3000);
         if (codeResponse.ok) sourceCode = await codeResponse.text();
       } catch {
         // use defaultCode
@@ -70,18 +102,7 @@ export async function executeCppLinearStructure(
       };
     }
   } catch {
-    // server offline, fall back to authentic precompiled snapshot
-  }
-
-  // 2. Precompiled snapshot cache
-  const cached = typedCatalog.traces[exactKey] || typedCatalog.traces[genericKey] || typedCatalog.traces[`${op}__${arrStr}`] || typedCatalog.traces[op];
-  if (cached && cached.length > 0) {
-    return {
-      steps: cached,
-      engineStatus: 'cpp-precompiled',
-      engineMessage: 'Replaying authentic C++ binary execution snapshot',
-      sourceCode: typedCatalog.codes[genericKey] || defaultCode
-    };
+    // server cold-starting or offline, fall back to closest precompiled snapshot
   }
 
   // Fallback search for closest precompiled trace
@@ -210,7 +231,17 @@ export async function executeCppAlgorithm(
   const cacheKey = `${op}__${arrStr}__${target}`;
   const defaultCode = typedCatalog.codes[op] || '// C++ source code not available';
 
-  // 1. Attempt live execution via Vite native C++ server endpoint
+  // 1. Instant precompiled C++ trace cache (0ms latency, eliminates Render cold starts)
+  if (typedCatalog.traces[cacheKey]) {
+    return {
+      steps: typedCatalog.traces[cacheKey],
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      sourceCode: defaultCode
+    };
+  }
+
+  // 2. Custom input -> Attempt live execution via C++ runner with 6s timeout
   try {
     const queryParams: Record<string, string> = {
       op,
@@ -222,14 +253,14 @@ export async function executeCppAlgorithm(
     }
     const query = new URLSearchParams(queryParams);
 
-    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
+    const res = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       
       // Fetch fresh source code if possible
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`, {}, 3000);
         if (codeRes.ok) {
           sourceCode = await codeRes.text();
         }
@@ -245,15 +276,16 @@ export async function executeCppAlgorithm(
       };
     }
   } catch {
-    // API endpoint unreachable (e.g., static build, vitest, or offline client)
+    // API endpoint unreachable or cold-starting
   }
 
-  // 2. Check authentic precompiled C++ trace cache
-  if (typedCatalog.traces[cacheKey]) {
+  // Fallback: search for closest precompiled trace for this algorithm
+  const fallbackKey = Object.keys(typedCatalog.traces).find((k) => k.startsWith(`${op}__`));
+  if (fallbackKey && typedCatalog.traces[fallbackKey]) {
     return {
-      steps: typedCatalog.traces[cacheKey],
+      steps: typedCatalog.traces[fallbackKey],
       engineStatus: 'cpp-precompiled',
-      engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      engineMessage: `Replaying authentic C++ binary execution snapshot (${fallbackKey.replace(`${op}__`, '')})`,
       sourceCode: defaultCode
     };
   }
@@ -414,7 +446,17 @@ export async function executeCppGraphAlgorithm(
       : undefined;
   const defaultCode = typedCatalog.codes[op] || '// C++ source code not available';
 
-  // 1. Attempt live execution via Vite native C++ server endpoint
+  // 1. Instant precompiled snapshot cache (0ms latency, eliminates Render cold starts)
+  if (cachedTrace) {
+    return {
+      steps: cachedTrace,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      sourceCode: defaultCode
+    };
+  }
+
+  // 2. Custom graph -> Attempt live execution via C++ runner with 6s timeout
   try {
     const queryParams: Record<string, string> = {
       op,
@@ -433,12 +475,12 @@ export async function executeCppGraphAlgorithm(
     }
 
     const query = new URLSearchParams(queryParams);
-    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
+    const res = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`, {}, 3000);
         if (codeRes.ok) {
           sourceCode = await codeRes.text();
         }
@@ -454,17 +496,7 @@ export async function executeCppGraphAlgorithm(
       };
     }
   } catch {
-    // Dev server offline or static build
-  }
-
-  // 2. Authentic precompiled C++ trace cache
-  if (cachedTrace) {
-    return {
-      steps: cachedTrace,
-      engineStatus: 'cpp-precompiled',
-      engineMessage: 'Replaying authentic C++ binary execution snapshot',
-      sourceCode: defaultCode
-    };
+    // Dev server offline, cold-starting, or static build
   }
 
   // Fallback: search for closest precompiled sample trace for this graph algorithm
@@ -545,7 +577,17 @@ export async function executeCppRecursionAlgorithm(
   const cacheKey = `${op}__${arrStr}__${target}`;
   const defaultCode = typedCatalog.codes[op] || '// C++ source code not available';
 
-  // 1. Attempt live execution
+  // 1. Instant precompiled cache (0ms latency, eliminates Render cold starts)
+  if (typedCatalog.traces[cacheKey]) {
+    return {
+      steps: preserveRecursionBoardState(typedCatalog.traces[cacheKey], op),
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'Replaying authentic C++ binary execution snapshot',
+      sourceCode: defaultCode,
+    };
+  }
+
+  // 2. Custom input -> Attempt live execution with 6s timeout
   try {
     const queryParams: Record<string, string> = {
       op,
@@ -558,12 +600,12 @@ export async function executeCppRecursionAlgorithm(
     }
 
     const query = new URLSearchParams(queryParams);
-    const res = await fetch(`${cppApiUrl('cpp-trace')}?${query.toString()}`);
+    const res = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetch(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`);
+        const codeRes = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`, {}, 3000);
         if (codeRes.ok) sourceCode = await codeRes.text();
       } catch { /* fall back */ }
       return {
@@ -573,17 +615,7 @@ export async function executeCppRecursionAlgorithm(
         sourceCode,
       };
     }
-  } catch { /* server offline */ }
-
-  // 2. Precompiled cache
-  if (typedCatalog.traces[cacheKey]) {
-    return {
-      steps: preserveRecursionBoardState(typedCatalog.traces[cacheKey], op),
-      engineStatus: 'cpp-precompiled',
-      engineMessage: 'Replaying authentic C++ binary execution snapshot',
-      sourceCode: defaultCode,
-    };
-  }
+  } catch { /* server cold-starting or offline */ }
 
   // Fallback: search for closest precompiled trace
   const fallbackKey = Object.keys(typedCatalog.traces).find(k => k.startsWith(`${op}__`));

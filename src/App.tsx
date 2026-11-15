@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { ArraysVisualizerPage } from './pages/ArraysVisualizerPage';
@@ -18,8 +18,12 @@ import { BacktrackingOverviewPage } from './pages/recursion/BacktrackingOverview
 import { RecursionAlgorithmPage } from './pages/recursion/RecursionAlgorithmPage';
 import { TopicWorkspacePage } from './pages/TopicWorkspacePage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { warmupCppBackend } from './services/cppExecutionAdapter';
 
 export const App: React.FC = () => {
+  useEffect(() => {
+    warmupCppBackend();
+  }, []);
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
