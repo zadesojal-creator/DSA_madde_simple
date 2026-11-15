@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { usePlayback } from '../hooks/usePlayback';
 import { PlaybackControls } from '../components/workspace/PlaybackControls';
 import { PseudocodePanel } from '../components/workspace/PseudocodePanel';
@@ -8,6 +8,7 @@ import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { executeCppLinearStructure } from '../services/cppExecutionAdapter';
 import type { ComplexityInfo, TraceStep } from '../types/trace';
+import { Play, RotateCcw } from 'lucide-react';
 
 type LinearStructureMode = 'queue' | 'circular-queue' | 'deque' | 'singly' | 'doubly' | 'circular';
 
@@ -139,6 +140,7 @@ export const LinearStructureVisualizerPage: React.FC<LinearStructureVisualizerPa
   const [sourceCode, setSourceCode] = useState('// Loading C++ source...');
   const [engineMessage, setEngineMessage] = useState('Waiting for native C++ execution.');
   const [loading, setLoading] = useState(true);
+  const [execCount, setExecCount] = useState<number>(0);
   const operationInfo = operations.find((item) => item.id === operation) ?? operations[0];
 
   const parsedValues = useMemo(() => parseIntegerList(valuesInput), [valuesInput]);
@@ -154,8 +156,16 @@ export const LinearStructureVisualizerPage: React.FC<LinearStructureVisualizerPa
     if (!Number.isInteger(index)) return 'Index must be an integer.';
     return undefined;
   }, [capacityInput, indexInput, linkedList, parsedValues, targetInput, valueInput]);
+
   const playback = usePlayback({ steps });
-  const resetPlayback = playback.reset;
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
 
   useEffect(() => {
     let active = true;
@@ -175,21 +185,26 @@ export const LinearStructureVisualizerPage: React.FC<LinearStructureVisualizerPa
       structure: mode === 'doubly' ? 'doubly' : mode === 'circular' ? 'circular' : 'singly'
     }).then((result) => {
       if (!active) return;
-      resetPlayback();
+      resetRef.current();
       setSteps(result.steps);
       setSourceCode(result.sourceCode);
       setEngineMessage(result.engineMessage);
+      if (result.steps.length > 1) {
+        setTimeout(() => {
+          playRef.current();
+        }, 80);
+      }
     }).catch((error: unknown) => {
       if (!active) return;
       const message = error instanceof Error ? error.message : String(error);
-      resetPlayback();
+      resetRef.current();
       setSteps([failureStep(`Native C++ trace request failed: ${message}`)]);
       setEngineMessage('Native C++ trace request failed.');
     }).finally(() => {
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [operation, valuesInput, capacityInput, valueInput, indexInput, targetInput, mode, linkedList, inputError, resetPlayback]);
+  }, [operation, valuesInput, capacityInput, valueInput, indexInput, targetInput, mode, linkedList, inputError, execCount]);
 
   const sourceLines = useMemo(() => (inputError ? '// Correct the input to load the matching C++ trace.' : sourceCode).split(/\r?\n/), [inputError, sourceCode]);
   const currentStep = inputError ? failureStep(inputError) : loading ? undefined : playback.currentStep;
@@ -247,7 +262,32 @@ export const LinearStructureVisualizerPage: React.FC<LinearStructureVisualizerPa
                   <input type="number" value={targetInput} onChange={(event) => { playback.reset(); setLoading(true); setTargetInput(event.target.value); }} className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 focus:border-violet-400 focus:outline-none" />
                 </label>
               )}
-              <p role="status" className={`text-xs ${inputError ? 'text-rose-600' : 'text-slate-500'}`}>{inputError ?? (loading ? 'Executing C++ trace…' : engineMessage)}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                <p role="status" className={`text-xs ${inputError ? 'text-rose-600' : 'text-slate-500'}`}>{inputError ?? (loading ? 'Executing C++ trace…' : engineMessage)}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetPlayback();
+                    }}
+                    title="Reset to beginning"
+                    className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExecCount((c) => c + 1);
+                    }}
+                    disabled={loading}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-200 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Execute Operation</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <StepExplanation currentStep={currentStep} totalSteps={playback.totalSteps} />
@@ -337,38 +377,189 @@ const LinkedListCanvas: React.FC<{ mode: LinearStructureMode; step?: TraceStep }
   const nodes = step?.linkedNodes ?? [];
   const doubly = mode === 'doubly';
   const circular = mode === 'circular';
+  const pointers = step?.pointers ?? [];
+
+  // Map pointer names to referenced node ID
+  const pointersByNodeId: Record<number, Array<{ name: string; color?: string }>> = {};
+  for (const p of pointers) {
+    if (!pointersByNodeId[p.index]) {
+      pointersByNodeId[p.index] = [];
+    }
+    pointersByNodeId[p.index].push(p);
+  }
+
   return (
     <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-md">
-      <div>
-        <h2 className="text-sm font-bold text-slate-900">Live pointer topology</h2>
-        <p className="text-xs text-slate-500">Indices are visual labels only. C++ traverses links to reach a node.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Live Pointer Topology</h2>
+          <p className="text-xs text-slate-500">Arrows represent actual C++ pointer linkages (next/prev).</p>
+        </div>
+        {step?.title && (
+          <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all duration-300 ${
+            step.statusType === 'success'
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : step.statusType === 'error'
+              ? 'bg-rose-50 text-rose-700 border-rose-200'
+              : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+          }`}>
+            {step.title}
+          </span>
+        )}
       </div>
-      <div className="overflow-x-auto rounded-xl bg-slate-50 p-4">
-        <div className="flex min-w-max items-center gap-2">
-          {!circular && <span className="text-xs font-bold text-cyan-700">head →</span>}
-          {nodes.map((node, index) => (
-            <React.Fragment key={node.id}>
-              <div className={`min-w-24 rounded-xl border-2 p-3 text-center ${node.id === step?.activeNodeId ? 'border-violet-500 bg-violet-50 shadow-md' : 'border-slate-200 bg-white'}`}>
-                <span className="block text-[10px] font-mono text-slate-400">index {index} · N{node.id}</span>
-                <strong className="my-1 block text-lg font-mono text-slate-900">{node.value}</strong>
-                <span className="block text-[10px] text-slate-500">{doubly ? `prev: ${node.prevId < 0 ? 'null' : `N${node.prevId}`}` : `next: ${node.nextId < 0 ? 'null' : `N${node.nextId}`}`}</span>
-                {doubly && <span className="block text-[10px] text-slate-500">next: {node.nextId < 0 ? 'null' : `N${node.nextId}`}</span>}
-                {node.id === step?.activeNodeId && <span className="mt-1 block text-[10px] font-bold text-violet-700">current</span>}
-              </div>
-              {index < nodes.length - 1 && <span className="px-1 text-lg font-bold text-indigo-500">{doubly ? '↔' : '→'}</span>}
-            </React.Fragment>
-          ))}
-          {nodes.length === 0 && <span className="text-xs italic text-slate-400">nullptr · empty list</span>}
-          {circular && nodes.length > 0 && <span className="ml-2 rounded-lg border border-fuchsia-200 bg-fuchsia-50 px-2 py-1 text-xs font-bold text-fuchsia-700">tail N{nodes[nodes.length - 1].id} → head N{nodes[0].id}</span>}
-          {!circular && nodes.length > 0 && <span className="text-xs font-bold text-slate-400">→ nullptr</span>}
+
+      {/* Main Node Diagram Area */}
+      <div className="overflow-x-auto rounded-xl bg-slate-50/80 p-5 border border-slate-100 min-h-[170px] flex items-center">
+        <div className="flex min-w-max items-center gap-2 pt-8 pb-3">
+          {!circular && (
+            <div className="flex flex-col items-center mr-1">
+              <span className="text-[11px] font-mono font-bold text-cyan-700 bg-cyan-50 px-2 py-0.5 rounded-md border border-cyan-200 shadow-xs">
+                HEAD
+              </span>
+              <span className="text-cyan-500 text-lg font-bold">→</span>
+            </div>
+          )}
+
+          {nodes.map((node, index) => {
+            const isActive = node.id === step?.activeNodeId;
+            const nodePointers = pointersByNodeId[node.id] || [];
+
+            return (
+              <React.Fragment key={node.id}>
+                <div className="relative flex flex-col items-center">
+                  {/* Floating Pointer Badges above node */}
+                  <div className="absolute -top-7 flex items-center gap-1 z-10 transition-all duration-300">
+                    {nodePointers.map((p) => {
+                      const colorClass =
+                        p.name === 'head'
+                          ? 'bg-cyan-500 text-white shadow-cyan-200'
+                          : p.name === 'tail'
+                          ? 'bg-amber-500 text-white shadow-amber-200'
+                          : p.name === 'current'
+                          ? 'bg-violet-600 text-white shadow-violet-200 ring-2 ring-violet-300'
+                          : p.name === 'prev'
+                          ? 'bg-blue-500 text-white shadow-blue-200'
+                          : 'bg-indigo-600 text-white shadow-indigo-200';
+
+                      return (
+                        <span
+                          key={p.name}
+                          className={`flex items-center gap-0.5 px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded-md shadow-sm transition-transform duration-200 animate-bounce ${colorClass}`}
+                        >
+                          <span>{p.name}</span>
+                          <span className="text-[9px]">↓</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  {/* Node Box */}
+                  <div
+                    className={`min-w-28 rounded-xl border-2 transition-all duration-300 transform select-none ${
+                      isActive
+                        ? 'border-violet-600 bg-violet-50/90 shadow-lg shadow-violet-500/20 ring-4 ring-violet-500/20 scale-105'
+                        : 'border-slate-200 bg-white hover:border-slate-300 shadow-sm'
+                    }`}
+                  >
+                    {/* Node Header: Visual Index & Memory ID */}
+                    <div className={`px-2.5 py-1 text-[10px] font-mono border-b flex items-center justify-between rounded-t-lg transition-colors ${
+                      isActive ? 'bg-violet-100/80 border-violet-200 text-violet-800' : 'bg-slate-50 border-slate-100 text-slate-400'
+                    }`}>
+                      <span>idx [{index}]</span>
+                      <span className="font-bold">N{node.id}</span>
+                    </div>
+
+                    {/* Node Body with Compartments */}
+                    <div className="p-2.5 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        {doubly && (
+                          <div className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-mono text-slate-500 border border-slate-200">
+                            P: {node.prevId < 0 ? '∅' : `N${node.prevId}`}
+                          </div>
+                        )}
+                        <strong className={`block text-xl font-mono font-extrabold px-3 py-1 rounded-lg transition-colors ${
+                          isActive ? 'text-violet-700 bg-white shadow-inner' : 'text-slate-800'
+                        }`}>
+                          {node.value}
+                        </strong>
+                        <div className="px-1.5 py-0.5 rounded bg-slate-100 text-[9px] font-mono text-slate-500 border border-slate-200">
+                          N: {node.nextId < 0 ? '∅' : `N${node.nextId}`}
+                        </div>
+                      </div>
+
+                      {isActive && (
+                        <div className="mt-1.5 flex items-center justify-center gap-1">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-violet-500 animate-ping" />
+                          <span className="text-[10px] font-bold text-violet-700 tracking-wide">
+                            VISITING
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Animated Arrow Connector */}
+                {index < nodes.length - 1 && (
+                  <div className="flex items-center px-1 transition-all duration-300">
+                    <span className={`text-xl font-bold transition-all duration-300 ${
+                      isActive ? 'text-violet-600 scale-125' : 'text-indigo-400'
+                    }`}>
+                      {doubly ? '⇄' : '→'}
+                    </span>
+                  </div>
+                )}
+              </React.Fragment>
+            );
+          })}
+
+          {nodes.length === 0 && (
+            <div className="py-6 px-8 rounded-xl border border-dashed border-slate-300 bg-white text-slate-400 text-xs font-mono flex items-center gap-2">
+              <span>⏚ nullptr (Empty List)</span>
+            </div>
+          )}
+
+          {/* List Terminators */}
+          {circular && nodes.length > 0 && (
+            <div className="ml-2 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-fuchsia-200 bg-fuchsia-50 text-xs font-bold text-fuchsia-700 font-mono shadow-xs animate-pulse">
+              <span>tail N{nodes[nodes.length - 1].id}</span>
+              <span>↷</span>
+              <span>head N{nodes[0].id}</span>
+            </div>
+          )}
+
+          {!circular && nodes.length > 0 && (
+            <div className="flex items-center gap-1 pl-1">
+              <span className="text-slate-400 text-lg font-bold">→</span>
+              <span className="px-2 py-1 rounded bg-slate-100 border border-slate-200 text-[10px] font-mono text-slate-500 font-bold">
+                NULL
+              </span>
+            </div>
+          )}
         </div>
       </div>
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="rounded-lg bg-cyan-50 px-2 py-1 text-cyan-800">head: {step?.variables?.head ?? 'nullptr'}</span>
-        <span className="rounded-lg bg-amber-50 px-2 py-1 text-amber-800">tail: {step?.variables?.tail ?? 'nullptr'}</span>
-        {circular && <span className="rounded-lg bg-fuchsia-50 px-2 py-1 text-fuchsia-800">tail-&gt;next: {nodes.length ? `N${nodes[0].id}` : 'nullptr'}</span>}
-        <span className="rounded-lg bg-slate-100 px-2 py-1">size: {step?.elementCount ?? 0}</span>
-        <span className="rounded-lg bg-slate-100 px-2 py-1">result: {step?.variables?.result ?? '—'}</span>
+
+      {/* Variables & State Footer */}
+      <div className="flex flex-wrap items-center gap-2 text-xs pt-1">
+        <span className="rounded-lg bg-cyan-50 border border-cyan-100 px-2.5 py-1 text-cyan-800 font-mono">
+          head: <strong>{step?.variables?.head ?? (nodes.length ? `N${nodes[0].id}` : 'nullptr')}</strong>
+        </span>
+        <span className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-1 text-amber-800 font-mono">
+          tail: <strong>{step?.variables?.tail ?? (nodes.length ? `N${nodes[nodes.length - 1].id}` : 'nullptr')}</strong>
+        </span>
+        {circular && (
+          <span className="rounded-lg bg-fuchsia-50 border border-fuchsia-100 px-2.5 py-1 text-fuchsia-800 font-mono">
+            tail→next: <strong>{nodes.length ? `N${nodes[0].id}` : 'nullptr'}</strong>
+          </span>
+        )}
+        <span className="rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 text-slate-700 font-mono">
+          size: <strong>{step?.elementCount ?? nodes.length}</strong>
+        </span>
+        {step?.variables?.result !== undefined && (
+          <span className="rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 text-emerald-800 font-mono font-bold">
+            result: {step.variables.result}
+          </span>
+        )}
       </div>
     </div>
   );

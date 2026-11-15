@@ -13,28 +13,36 @@ export function usePlayback({ steps, initialSpeed = 1, autoPlay = false }: UsePl
   const [speed, setSpeed] = useState<PlaybackSpeed>(initialSpeed);
 
   const totalSteps = steps.length;
-  const isAtEnd = totalSteps > 0 && currentStepIndex >= totalSteps - 1;
-  const isAtStart = currentStepIndex <= 0;
+  const safeStepIndex = totalSteps > 0 ? Math.min(currentStepIndex, totalSteps - 1) : 0;
+  const isAtEnd = totalSteps > 0 && safeStepIndex >= totalSteps - 1;
+  const isAtStart = safeStepIndex <= 0;
+
+  const stepsRef = useRef(steps);
+  useEffect(() => {
+    stepsRef.current = steps;
+  }, [steps]);
 
   // Active step snapshot
-  const currentStep: TraceStep | undefined = steps[currentStepIndex];
+  const currentStep: TraceStep | undefined = steps[safeStepIndex];
 
   const playFromStart = useCallback((stepCount?: number) => {
     setCurrentStepIndex(0);
-    const count = stepCount ?? totalSteps;
+    const count = stepCount ?? stepsRef.current.length;
     setIsPlaying(count > 1);
-  }, [totalSteps]);
+  }, []);
 
   const play = useCallback(() => {
-    if (totalSteps <= 1) {
+    const count = stepsRef.current.length;
+    if (count <= 1) {
       setIsPlaying(false);
       return;
     }
-    if (isAtEnd) {
-      setCurrentStepIndex(0);
-    }
+    setCurrentStepIndex((prev) => {
+      if (prev >= count - 1) return 0;
+      return prev;
+    });
     setIsPlaying(true);
-  }, [isAtEnd, totalSteps]);
+  }, []);
 
   const pause = useCallback(() => {
     setIsPlaying(false);

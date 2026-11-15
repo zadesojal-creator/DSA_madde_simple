@@ -44,7 +44,7 @@ export const PlaybackControls: React.FC<PlaybackControlsProps> = ({
         {/* Step Progress Slider */}
         <div className="flex-1 w-full flex items-center gap-3">
           <span className="text-xs font-mono text-slate-600 font-bold w-12 text-right shrink-0">
-            {currentStepIndex + 1} / {totalSteps}
+            {totalSteps > 0 ? `${currentStepIndex + 1} / ${totalSteps}` : '0 / 0'}
           </span>
           <div className="relative flex-1">
             <input

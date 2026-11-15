@@ -104,7 +104,8 @@ const DEFAULT_CONFIGS: Record<string, DefaultGraphConfig> = {
       { u: 0, v: 2, weight: 8 },
       { u: 1, v: 2, weight: 2 },
       { u: 1, v: 3, weight: 5 },
-      { u: 2, v: 3, weight: 1 }
+      { u: 2, v: 3, weight: 1 },
+      { u: 3, v: 0, weight: 2 }
     ],
     source: 0,
     target: 3
