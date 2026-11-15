@@ -356,6 +356,22 @@ export const NAVIGATION_CATEGORIES: NavigationCategory[] = [
         isImplemented: true,
         badge: "C++ Engine",
         description: "Dynamic programming all-pairs shortest path matrix with intermediate vertex detours."
+      },
+      {
+        id: "prims",
+        title: "Prim's Algorithm (MST)",
+        route: "/visualizer/graphs/prims",
+        isImplemented: true,
+        badge: "C++ Engine",
+        description: "Greedy cut-based Minimum Spanning Tree construction with min-priority queue."
+      },
+      {
+        id: "kruskals",
+        title: "Kruskal's Algorithm (MST)",
+        route: "/visualizer/graphs/kruskals",
+        isImplemented: true,
+        badge: "C++ Engine",
+        description: "Greedy edge-sorting Minimum Spanning Tree with Disjoint-Set Union cycle detection."
       }
     ]
   },

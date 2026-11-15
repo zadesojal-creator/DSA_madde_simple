@@ -1,6 +1,9 @@
 import React from 'react';
 import type { TraceStep } from '../../types/trace';
-import { Layers, Activity, AlertTriangle, ArrowRight, Route, Clock, ListOrdered } from 'lucide-react';
+import { 
+  Layers, Activity, AlertTriangle, ArrowRight, Route, 
+  Clock, ListOrdered, Network, GitMerge, CheckCircle2, ShieldCheck, XCircle
+} from 'lucide-react';
 
 interface GraphAlgorithmStatePanelProps {
   currentStep?: TraceStep;
@@ -308,6 +311,273 @@ export const GraphAlgorithmStatePanel: React.FC<GraphAlgorithmStatePanelProps> =
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 6. Prim's Algorithm (MST) */}
+      {(algorithmId === 'prims' || algorithmId === 'prim') && (
+        <div className="space-y-4">
+          {/* MST Summary Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Total MST Weight</span>
+              <div className="text-base font-bold text-emerald-400 font-mono">
+                {currentStep.variables?.totalWeight !== undefined ? currentStep.variables.totalWeight : 0}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Tree Edges Added</span>
+              <div className="text-base font-bold text-cyan-400 font-mono">
+                {currentStep.variables?.mstEdgesCount !== undefined
+                  ? `${currentStep.variables.mstEdgesCount} / ${Math.max(vertices.length - 1, 1)}`
+                  : '0 / ' + Math.max(vertices.length - 1, 1)}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Boundary Candidate Edges</span>
+              <div className="text-base font-bold text-amber-400 font-mono">
+                {pq.length}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">MST Status</span>
+              <div className="text-xs font-bold font-mono pt-0.5">
+                {currentStep.isCompleted ? (
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Spanning Tree Complete
+                  </span>
+                ) : (
+                  <span className="text-cyan-300 flex items-center gap-1">
+                    <Network className="w-3.5 h-3.5" /> Growing Cut
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Cut Edge Priority Queue */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Boundary Cut Candidate Edges (Min-Priority Queue)</span>
+              </span>
+              <span className="text-[11px] font-mono text-slate-400">Size: {pq.length}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-950/80 rounded-xl border border-slate-800 min-h-[48px]">
+              {pq.length === 0 ? (
+                <span className="text-slate-600 italic font-mono text-xs">No pending cut edges in priority queue</span>
+              ) : (
+                pq.map((entry, idx) => (
+                  <div
+                    key={idx}
+                    className="px-3 py-1 rounded-lg bg-cyan-950 border border-cyan-500/60 text-cyan-200 font-mono text-xs font-bold"
+                  >
+                    {entry}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Key and Parent Array Table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300">Prim's Key & In-MST Status Table</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-center font-mono text-xs border border-slate-800 rounded-lg overflow-hidden">
+                <thead className="bg-slate-950 text-slate-400">
+                  <tr>
+                    <th className="p-1.5 border border-slate-800">Vertex</th>
+                    {vertices.map((v) => (
+                      <th key={v.id} className="p-1.5 border border-slate-800 text-indigo-300 font-bold">
+                        {v.id}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-slate-900/80">
+                    <td className="p-1.5 font-bold text-slate-400 border border-slate-800">key[v]</td>
+                    {vertices.map((v) => {
+                      const isInf = !v.hasDistance || v.distance >= 1000000000;
+                      return (
+                        <td
+                          key={v.id}
+                          className={`p-1.5 border border-slate-800 font-bold ${
+                            isInf ? 'text-slate-600' : 'text-emerald-400'
+                          }`}
+                        >
+                          {isInf ? '∞' : v.distance}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-slate-900/60">
+                    <td className="p-1.5 font-bold text-slate-400 border border-slate-800">parent[v]</td>
+                    {vertices.map((v) => (
+                      <td key={v.id} className="p-1.5 border border-slate-800 text-slate-300">
+                        {v.predecessor !== -1 ? v.predecessor : '∅'}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-slate-900/40">
+                    <td className="p-1.5 font-bold text-slate-400 border border-slate-800">In Tree?</td>
+                    {vertices.map((v) => {
+                      const inTree = v.state === 'visited';
+                      return (
+                        <td
+                          key={v.id}
+                          className={`p-1.5 border border-slate-800 font-bold text-[10px] ${
+                            inTree ? 'text-emerald-400' : 'text-slate-500'
+                          }`}
+                        >
+                          {inTree ? 'YES' : 'NO'}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Kruskal's Algorithm (MST) */}
+      {(algorithmId === 'kruskals' || algorithmId === 'kruskal') && (
+        <div className="space-y-4">
+          {/* MST Summary Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Total MST Weight</span>
+              <div className="text-base font-bold text-emerald-400 font-mono">
+                {currentStep.variables?.totalWeight !== undefined ? currentStep.variables.totalWeight : 0}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Tree Edges Added</span>
+              <div className="text-base font-bold text-cyan-400 font-mono">
+                {currentStep.variables?.mstEdgesCount !== undefined
+                  ? `${currentStep.variables.mstEdgesCount} / ${Math.max(vertices.length - 1, 1)}`
+                  : '0 / ' + Math.max(vertices.length - 1, 1)}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Edges Evaluated</span>
+              <div className="text-base font-bold text-amber-400 font-mono">
+                {currentStep.variables?.edgesEvaluated !== undefined ? currentStep.variables.edgesEvaluated : 0}
+              </div>
+            </div>
+            <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1">
+              <span className="text-[11px] text-slate-400 font-sans">Kruskal Status</span>
+              <div className="text-xs font-bold font-mono pt-0.5">
+                {currentStep.isCompleted ? (
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Spanning Forest Unified
+                  </span>
+                ) : (
+                  <span className="text-indigo-300 flex items-center gap-1">
+                    <GitMerge className="w-3.5 h-3.5" /> Checking Edges
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Cycle / Safe Edge Status Banner */}
+          {currentStep.variables?.cycleStatus && (
+            <div className={`flex items-start gap-3 p-3.5 rounded-xl border ${
+              String(currentStep.variables.cycleStatus).includes('CYCLE') || String(currentStep.variables.cycleStatus).includes('Discarded')
+                ? 'bg-rose-950/70 border-rose-500/60 text-rose-200'
+                : 'bg-emerald-950/60 border-emerald-500/60 text-emerald-200'
+            }`}>
+              {String(currentStep.variables.cycleStatus).includes('CYCLE') || String(currentStep.variables.cycleStatus).includes('Discarded') ? (
+                <XCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5 animate-pulse" />
+              ) : (
+                <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              )}
+              <div className="text-xs space-y-0.5">
+                <p className="font-bold">
+                  {String(currentStep.variables.cycleStatus).includes('CYCLE') || String(currentStep.variables.cycleStatus).includes('Discarded')
+                    ? 'Cycle Detected — Edge Discarded'
+                    : 'Acyclic Edge Accepted — Added to MST'}
+                </p>
+                <p className="opacity-90">{String(currentStep.variables.cycleStatus)}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Disjoint Set Union (DSU / Union-Find) Table */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                <GitMerge className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Disjoint-Set Union (DSU / Union-Find) Components</span>
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-center font-mono text-xs border border-slate-800 rounded-lg overflow-hidden">
+                <thead className="bg-slate-950 text-slate-400">
+                  <tr>
+                    <th className="p-1.5 border border-slate-800">Vertex</th>
+                    {vertices.map((v) => (
+                      <th key={v.id} className="p-1.5 border border-slate-800 text-indigo-300 font-bold">
+                        {v.id}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="bg-slate-900/80">
+                    <td className="p-1.5 font-bold text-slate-400 border border-slate-800">Parent (Root)</td>
+                    {vertices.map((v) => (
+                      <td key={v.id} className="p-1.5 border border-slate-800 font-bold text-cyan-300">
+                        {v.predecessor !== -1 ? v.predecessor : v.id}
+                      </td>
+                    ))}
+                  </tr>
+                  <tr className="bg-slate-900/60">
+                    <td className="p-1.5 font-bold text-slate-400 border border-slate-800">Component</td>
+                    {vertices.map((v) => (
+                      <td key={v.id} className="p-1.5 border border-slate-800 text-amber-300 text-[11px]">
+                        Set({v.predecessor !== -1 ? v.predecessor : v.id})
+                      </td>
+                    ))}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Sorted Edge List */}
+          {pq.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <ListOrdered className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Sorted Edge Queue & Selection Status</span>
+              </span>
+              <div className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-950/60 rounded-xl border border-slate-800 max-h-36 overflow-y-auto">
+                {pq.map((edgeInfo, idx) => (
+                  <div
+                    key={idx}
+                    className={`px-2.5 py-1 rounded-lg font-mono text-xs font-bold border ${
+                      edgeInfo.includes('✓') || edgeInfo.includes('mst')
+                        ? 'bg-emerald-950 border-emerald-500/60 text-emerald-200'
+                        : edgeInfo.includes('✗') || edgeInfo.includes('cycle')
+                        ? 'bg-rose-950 border-rose-500/60 text-rose-300 line-through'
+                        : edgeInfo.includes('active')
+                        ? 'bg-cyan-950 border-cyan-500/60 text-cyan-200 animate-pulse'
+                        : 'bg-slate-900 border-slate-800 text-slate-400'
+                    }`}
+                  >
+                    {edgeInfo}
+                  </div>
+                ))}
               </div>
             </div>
           )}

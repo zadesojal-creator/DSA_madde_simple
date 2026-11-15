@@ -123,6 +123,34 @@ CppGraph createSampleGraph(const std::string& algorithmId) {
         g.addEdge(3, 0, 2, 6);
         return g;
     }
+    if (algorithmId == "prims" || algorithmId == "prim") {
+        // 6 vertices, undirected, weighted
+        CppGraph g(6, false, true);
+        g.addEdge(0, 1, 4, 1);
+        g.addEdge(0, 2, 2, 2);
+        g.addEdge(1, 2, 1, 3);
+        g.addEdge(1, 3, 5, 4);
+        g.addEdge(2, 3, 8, 5);
+        g.addEdge(2, 4, 10, 6);
+        g.addEdge(3, 4, 2, 7);
+        g.addEdge(3, 5, 6, 8);
+        g.addEdge(4, 5, 3, 9);
+        return g;
+    }
+    if (algorithmId == "kruskals" || algorithmId == "kruskal") {
+        // 6 vertices, undirected, weighted
+        CppGraph g(6, false, true);
+        g.addEdge(0, 1, 4, 1);
+        g.addEdge(0, 2, 2, 2);
+        g.addEdge(1, 2, 1, 3);
+        g.addEdge(1, 3, 5, 4);
+        g.addEdge(2, 3, 8, 5);
+        g.addEdge(2, 4, 10, 6);
+        g.addEdge(3, 4, 2, 7);
+        g.addEdge(3, 5, 6, 8);
+        g.addEdge(4, 5, 3, 9);
+        return g;
+    }
     // Default fallback
     CppGraph g(4, false, false);
     g.addEdge(0, 1, 1, 1);
@@ -895,6 +923,388 @@ void traceFloydWarshall(const CppGraph& g, int sourceVertex, int targetVertex, T
 }
 
 // -------------------------------------------------------------
+// 6. Prim's Minimum Spanning Tree (MST) Algorithm
+// -------------------------------------------------------------
+void tracePrims(const CppGraph& g, int startVertex, TraceEmitter& emitter) {
+    int V = g.vertexCount;
+    if (startVertex < 0 || startVertex >= V) startVertex = 0;
+
+    // Collect unique undirected edges for state tracking
+    std::map<std::pair<int, int>, int> edgeIndexMap;
+    int edgeCount = 0;
+    std::set<std::pair<int, int>> seenEdges;
+    for (int u = 0; u < V; ++u) {
+        for (const auto& e : g.adj[u]) {
+            int v = e.to;
+            int small = std::min(u, v);
+            int big = std::max(u, v);
+            if (!seenEdges.count({small, big})) {
+                seenEdges.insert({small, big});
+                edgeIndexMap[{small, big}] = edgeCount++;
+            }
+        }
+    }
+
+    std::vector<std::string> vStates(V, "unvisited");
+    std::vector<int> key(V, GRAPH_INF);
+    std::vector<int> parent(V, -1);
+    std::vector<int> dt(V, -1);
+    std::vector<int> ft(V, -1);
+    std::vector<std::string> eStates(edgeCount, "normal");
+    std::vector<bool> inMST(V, false);
+
+    // Min-priority queue: (weight, u, v) where u is tree node, v is candidate neighbor
+    struct CutEdge {
+        int w;
+        int u;
+        int v;
+        bool operator>(const CutEdge& other) const {
+            if (w != other.w) return w > other.w;
+            if (u != other.u) return u > other.u;
+            return v > other.v;
+        }
+    };
+    std::priority_queue<CutEdge, std::vector<CutEdge>, std::greater<CutEdge>> pq;
+
+    int totalWeight = 0;
+    int mstEdgesCount = 0;
+
+    // Initialize with startVertex
+    key[startVertex] = 0;
+    vStates[startVertex] = "active";
+
+    auto getPqState = [&]() {
+        auto temp = pq;
+        std::vector<std::string> res;
+        while (!temp.empty()) {
+            auto ce = temp.top();
+            temp.pop();
+            res.push_back("(" + std::to_string(ce.u) + "—" + std::to_string(ce.v) + ", w=" + std::to_string(ce.w) + ")");
+        }
+        return res;
+    };
+
+    TraceEvent ev;
+    ev.eventType = "initialize";
+    ev.title = "Prim's MST Initialized at Root " + std::to_string(startVertex);
+    ev.description = "Growing tree from root vertex " + std::to_string(startVertex) + ". Key initialized to 0; all other keys = ∞.";
+    ev.sourceLine = 4;
+    ev.activeVertexId = startVertex;
+    ev.variables["totalWeight"] = std::to_string(totalWeight);
+    ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+    captureGraphSnapshot(g, vStates, key, parent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+    ev.priorityQueueState = getPqState();
+    emitter.emit(ev);
+
+    // Push startVertex to PQ as (0, -1, startVertex)
+    pq.push({0, -1, startVertex});
+
+    while (!pq.empty() && mstEdgesCount < V) {
+        CutEdge current = pq.top();
+        pq.pop();
+        int w = current.w;
+        int u = current.u;
+        int v = current.v;
+
+        // If vertex v is already in MST, skip stale edge
+        if (inMST[v]) {
+            continue;
+        }
+
+        // Add v to MST
+        inMST[v] = true;
+        vStates[v] = "visited";
+        if (u != -1) {
+            totalWeight += w;
+            mstEdgesCount++;
+            int small = std::min(u, v);
+            int big = std::max(u, v);
+            if (edgeIndexMap.count({small, big})) {
+                eStates[edgeIndexMap[{small, big}]] = "mst";
+            }
+        }
+
+        ev = TraceEvent();
+        ev.eventType = u == -1 ? "vertex_start" : "edge_add_mst";
+        ev.title = u == -1 
+            ? "Root Vertex " + std::to_string(v) + " Included in MST"
+            : "Add Minimum Cut Edge (" + std::to_string(u) + " — " + std::to_string(v) + ", w=" + std::to_string(w) + ") to MST";
+        ev.description = u == -1
+            ? "Root vertex " + std::to_string(v) + " enters the spanning tree. Now discovering incident cut edges."
+            : "Lightest boundary cut edge selected! Vertex " + std::to_string(v) + " united into MST. Total MST weight is now " + std::to_string(totalWeight) + ".";
+        ev.sourceLine = 8;
+        ev.activeVertexId = v;
+        if (u != -1) {
+            ev.activeEdgeU = u;
+            ev.activeEdgeV = v;
+        }
+        ev.variables["totalWeight"] = totalWeight;
+        ev.variables["mstEdgesCount"] = mstEdgesCount;
+        captureGraphSnapshot(g, vStates, key, parent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+        ev.priorityQueueState = getPqState();
+        emitter.emit(ev);
+
+        // Examine all incident edges of v to find new boundary cut candidates
+        for (const auto& edge : g.adj[v]) {
+            int to = edge.to;
+            int edgeWeight = edge.weight;
+
+            if (!inMST[to]) {
+                int small = std::min(v, to);
+                int big = std::max(v, to);
+                int eIdx = edgeIndexMap.count({small, big}) ? edgeIndexMap[{small, big}] : -1;
+                if (eIdx >= 0 && eStates[eIdx] != "mst") {
+                    eStates[eIdx] = "active";
+                }
+
+                bool keyUpdated = false;
+                if (edgeWeight < key[to]) {
+                    key[to] = edgeWeight;
+                    parent[to] = v;
+                    keyUpdated = true;
+                }
+
+                pq.push({edgeWeight, v, to});
+
+                ev = TraceEvent();
+                ev.eventType = "cut_edge_discover";
+                ev.title = "Inspect Boundary Edge (" + std::to_string(v) + " — " + std::to_string(to) + ", w=" + std::to_string(edgeWeight) + ")";
+                ev.description = keyUpdated
+                    ? "Vertex " + std::to_string(to) + " key decreased to " + std::to_string(edgeWeight) + " via parent " + std::to_string(v) + ". Pushed cut edge to min-heap."
+                    : "Pushed alternative cut edge (" + std::to_string(v) + " — " + std::to_string(to) + ", w=" + std::to_string(edgeWeight) + ") to min-heap.";
+                ev.sourceLine = 12;
+                ev.activeVertexId = v;
+                ev.activeEdgeU = v;
+                ev.activeEdgeV = to;
+                ev.variables["totalWeight"] = totalWeight;
+                ev.variables["mstEdgesCount"] = mstEdgesCount;
+                captureGraphSnapshot(g, vStates, key, parent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+                ev.priorityQueueState = getPqState();
+                emitter.emit(ev);
+
+                if (eIdx >= 0 && eStates[eIdx] == "active") {
+                    eStates[eIdx] = "normal";
+                }
+            }
+        }
+    }
+
+    // Final Completion Event
+    ev = TraceEvent();
+    ev.eventType = "complete";
+    ev.title = "Prim's Algorithm Complete — MST Weight: " + std::to_string(totalWeight);
+    ev.description = "Minimum Spanning Tree successfully constructed with " + std::to_string(mstEdgesCount) + 
+                     " edges and total minimal weight of " + std::to_string(totalWeight) + ".";
+    ev.sourceLine = 16;
+    ev.activeVertexId = -1;
+    ev.activeEdgeU = -1;
+    ev.activeEdgeV = -1;
+    ev.variables["totalWeight"] = std::to_string(totalWeight);
+    ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+    captureGraphSnapshot(g, vStates, key, parent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+    ev.priorityQueueState.clear();
+    ev.isCompleted = true;
+    emitter.emit(ev);
+}
+
+// -------------------------------------------------------------
+// 7. Kruskal's Minimum Spanning Tree (MST) Algorithm
+// -------------------------------------------------------------
+void traceKruskals(const CppGraph& g, TraceEmitter& emitter) {
+    int V = g.vertexCount;
+
+    // Collect all unique undirected edges
+    struct KEdge {
+        int u;
+        int v;
+        int w;
+        int id;
+    };
+    std::vector<KEdge> allEdges;
+    std::set<std::pair<int, int>> seenEdges;
+    std::map<std::pair<int, int>, int> edgeIndexMap;
+    int edgeCount = 0;
+
+    for (int u = 0; u < V; ++u) {
+        for (const auto& e : g.adj[u]) {
+            int v = e.to;
+            int small = std::min(u, v);
+            int big = std::max(u, v);
+            if (!seenEdges.count({small, big})) {
+                seenEdges.insert({small, big});
+                edgeIndexMap[{small, big}] = edgeCount++;
+                allEdges.push_back({small, big, e.weight, edgeCount - 1});
+            }
+        }
+    }
+
+    // Sort edges ascending by weight (then by u, v for stability)
+    std::sort(allEdges.begin(), allEdges.end(), [](const KEdge& a, const KEdge& b) {
+        if (a.w != b.w) return a.w < b.w;
+        if (a.u != b.u) return a.u < b.u;
+        return a.v < b.v;
+    });
+
+    // Disjoint Set Union (DSU) structures
+    std::vector<int> dsuParent(V);
+    std::vector<int> dsuRank(V, 0);
+    for (int i = 0; i < V; ++i) dsuParent[i] = i;
+
+    auto findRoot = [&](auto& self, int i) -> int {
+        if (dsuParent[i] == i) return i;
+        return dsuParent[i] = self(self, dsuParent[i]);
+    };
+
+    auto unionSets = [&](int rootA, int rootB) {
+        if (rootA != rootB) {
+            if (dsuRank[rootA] < dsuRank[rootB]) {
+                dsuParent[rootA] = rootB;
+            } else if (dsuRank[rootA] > dsuRank[rootB]) {
+                dsuParent[rootB] = rootA;
+            } else {
+                dsuParent[rootB] = rootA;
+                dsuRank[rootA]++;
+            }
+        }
+    };
+
+    std::vector<std::string> vStates(V, "unvisited");
+    std::vector<int> dummyDist(V, GRAPH_INF);
+    std::vector<int> dt(V, -1);
+    std::vector<int> ft(V, -1);
+    std::vector<std::string> eStates(edgeCount, "normal");
+
+    int totalWeight = 0;
+    int mstEdgesCount = 0;
+    int edgesEvaluated = 0;
+
+    // Build formatted sorted edge strings for UI
+    std::vector<std::string> edgeStatusTokens(allEdges.size());
+    for (size_t i = 0; i < allEdges.size(); ++i) {
+        edgeStatusTokens[i] = std::to_string(allEdges[i].u) + "—" + std::to_string(allEdges[i].v) + " (w=" + std::to_string(allEdges[i].w) + ")";
+    }
+
+    TraceEvent ev;
+    ev.eventType = "initialize";
+    ev.title = "Kruskal's MST Initialized — Sorted " + std::to_string(allEdges.size()) + " Edges";
+    ev.description = "All edges sorted in non-decreasing order of weight. Each of the " + std::to_string(V) + 
+                     " vertices begins in its own independent Disjoint Set.";
+    ev.sourceLine = 4;
+    ev.variables["totalWeight"] = std::to_string(totalWeight);
+    ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+    ev.variables["edgesEvaluated"] = edgesEvaluated;
+    ev.variables["cycleStatus"] = "Initialized DSU forest: " + std::to_string(V) + " single-vertex components";
+    captureGraphSnapshot(g, vStates, dummyDist, dsuParent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+    ev.priorityQueueState = edgeStatusTokens;
+    emitter.emit(ev);
+
+    for (size_t i = 0; i < allEdges.size(); ++i) {
+        const auto& edge = allEdges[i];
+        int u = edge.u;
+        int v = edge.v;
+        int w = edge.w;
+        int eIdx = edge.id;
+        edgesEvaluated++;
+
+        // Edge examine step
+        eStates[eIdx] = "active";
+        edgeStatusTokens[i] = std::to_string(u) + "—" + std::to_string(v) + " [active w=" + std::to_string(w) + "]";
+
+        int rootU = findRoot(findRoot, u);
+        int rootV = findRoot(findRoot, v);
+
+        ev = TraceEvent();
+        ev.eventType = "edge_examine";
+        ev.title = "Examine Edge (" + std::to_string(u) + " — " + std::to_string(v) + ", w=" + std::to_string(w) + ")";
+        ev.description = "Checking DSU sets: find(" + std::to_string(u) + ") = " + std::to_string(rootU) + 
+                         ", find(" + std::to_string(v) + ") = " + std::to_string(rootV) + ".";
+        ev.sourceLine = 8;
+        ev.activeEdgeU = u;
+        ev.activeEdgeV = v;
+        ev.variables["totalWeight"] = std::to_string(totalWeight);
+        ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+        ev.variables["edgesEvaluated"] = std::to_string(edgesEvaluated);
+        ev.variables["rootU"] = std::to_string(rootU);
+        ev.variables["rootV"] = std::to_string(rootV);
+        ev.variables["cycleStatus"] = "find(" + std::to_string(u) + ")=" + std::to_string(rootU) + ", find(" + std::to_string(v) + ")=" + std::to_string(rootV);
+        captureGraphSnapshot(g, vStates, dummyDist, dsuParent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+        ev.priorityQueueState = edgeStatusTokens;
+        emitter.emit(ev);
+
+        if (rootU == rootV) {
+            // Cycle detected!
+            eStates[eIdx] = "discarded";
+            edgeStatusTokens[i] = std::to_string(u) + "—" + std::to_string(v) + " (w=" + std::to_string(w) + ") ✗ cycle";
+
+            ev = TraceEvent();
+            ev.eventType = "cycle_detected";
+            ev.title = "Cycle Detected! Discard Edge (" + std::to_string(u) + " — " + std::to_string(v) + ")";
+            ev.description = "Both vertices " + std::to_string(u) + " and " + std::to_string(v) + 
+                             " already share root " + std::to_string(rootU) + " in the same component. Adding this edge would form a cycle! Discarding.";
+            ev.sourceLine = 12;
+            ev.activeEdgeU = u;
+            ev.activeEdgeV = v;
+            ev.variables["totalWeight"] = std::to_string(totalWeight);
+            ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+            ev.variables["edgesEvaluated"] = std::to_string(edgesEvaluated);
+            ev.variables["cycleStatus"] = "CYCLE DETECTED: Vertices " + std::to_string(u) + " and " + std::to_string(v) + " already connected (Root " + std::to_string(rootU) + ") -> Discarded";
+            captureGraphSnapshot(g, vStates, dummyDist, dsuParent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+            ev.priorityQueueState = edgeStatusTokens;
+            emitter.emit(ev);
+        } else {
+            // Safe acyclic edge accepted!
+            unionSets(rootU, rootV);
+            totalWeight += w;
+            mstEdgesCount++;
+            eStates[eIdx] = "mst";
+            vStates[u] = "visited";
+            vStates[v] = "visited";
+            edgeStatusTokens[i] = std::to_string(u) + "—" + std::to_string(v) + " (w=" + std::to_string(w) + ") ✓ mst";
+
+            ev = TraceEvent();
+            ev.eventType = "edge_accepted";
+            ev.title = "Edge Accepted! (" + std::to_string(u) + " — " + std::to_string(v) + ", w=" + std::to_string(w) + ") Added to MST";
+            ev.description = "Components with roots " + std::to_string(rootU) + " and " + std::to_string(rootV) + 
+                             " unified. Spanning tree now contains " + std::to_string(mstEdgesCount) + " edges. Total weight = " + std::to_string(totalWeight) + ".";
+            ev.sourceLine = 15;
+            ev.activeEdgeU = u;
+            ev.activeEdgeV = v;
+            ev.variables["totalWeight"] = std::to_string(totalWeight);
+            ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+            ev.variables["edgesEvaluated"] = std::to_string(edgesEvaluated);
+            ev.variables["cycleStatus"] = "EDGE ACCEPTED: Unified Component(" + std::to_string(rootU) + ") with Component(" + std::to_string(rootV) + ")";
+            captureGraphSnapshot(g, vStates, dummyDist, dsuParent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+            ev.priorityQueueState = edgeStatusTokens;
+            emitter.emit(ev);
+
+            if (mstEdgesCount == V - 1) {
+                // MST completed early!
+                break;
+            }
+        }
+    }
+
+    // Final Completion Event
+    ev = TraceEvent();
+    ev.eventType = "complete";
+    ev.title = "Kruskal's Algorithm Complete — MST Weight: " + std::to_string(totalWeight);
+    ev.description = "Minimum Spanning Tree construction complete with exactly " + std::to_string(mstEdgesCount) + 
+                     " edges. All " + std::to_string(V) + " vertices connected with total minimal weight of " + std::to_string(totalWeight) + ".";
+    ev.sourceLine = 18;
+    ev.activeVertexId = -1;
+    ev.activeEdgeU = -1;
+    ev.activeEdgeV = -1;
+    ev.variables["totalWeight"] = std::to_string(totalWeight);
+    ev.variables["mstEdgesCount"] = std::to_string(mstEdgesCount);
+    ev.variables["edgesEvaluated"] = edgesEvaluated;
+    ev.variables["cycleStatus"] = "MST Completed: Total Weight = " + std::to_string(totalWeight);
+    captureGraphSnapshot(g, vStates, dummyDist, dsuParent, dt, ft, eStates, ev.graphVertices, ev.graphEdges);
+    ev.priorityQueueState = edgeStatusTokens;
+    ev.isCompleted = true;
+    emitter.emit(ev);
+}
+
+// -------------------------------------------------------------
 // Canonical C++ Source Code Provider
 // -------------------------------------------------------------
 std::string getGraphSourceCode(const std::string& op) {
@@ -994,6 +1404,48 @@ std::string getGraphSourceCode(const std::string& op) {
             "                }\n"
             "            }\n"
             "        }\n"
+            "    }\n"
+            "}";
+    }
+    if (op == "prims" || op == "prim" || op == "graph-prims") {
+        return
+            "void primsMST(int start, const Graph& g) {\n"
+            "    std::vector<int> key(g.V, INF);\n"
+            "    std::vector<bool> inMST(g.V, false);\n"
+            "    std::priority_queue<Edge, vector<Edge>, greater<Edge>> pq;\n"
+            "    key[start] = 0;\n"
+            "    pq.push({0, -1, start});\n"
+            "    while (!pq.empty()) {\n"
+            "        auto [w, u, v] = pq.top(); pq.pop();\n"
+            "        if (inMST[v]) continue; // skip cycle/stale\n"
+            "        inMST[v] = true;\n"
+            "        if (u != -1) addEdgeToMST(u, v, w);\n"
+            "        for (const auto& e : g.adj[v]) {\n"
+            "            if (!inMST[e.to] && e.weight < key[e.to]) {\n"
+            "                key[e.to] = e.weight;\n"
+            "                parent[e.to] = v;\n"
+            "                pq.push({e.weight, v, e.to});\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}";
+    }
+    if (op == "kruskals" || op == "kruskal" || op == "graph-kruskals") {
+        return
+            "void kruskalsMST(int V, vector<Edge>& edges) {\n"
+            "    sort(edges.begin(), edges.end());\n"
+            "    DSU dsu(V);\n"
+            "    int totalWeight = 0, mstEdges = 0;\n"
+            "    for (const auto& e : edges) {\n"
+            "        int rootU = dsu.find(e.u);\n"
+            "        int rootV = dsu.find(e.v);\n"
+            "        if (rootU != rootV) {\n"
+            "            dsu.unite(rootU, rootV);\n"
+            "            totalWeight += e.w;\n"
+            "            mstEdges++;\n"
+            "            addMstEdge(e);\n"
+            "            if (mstEdges == V - 1) break;\n"
+            "        } // else: cycle detected -> discard\n"
             "    }\n"
             "}";
     }

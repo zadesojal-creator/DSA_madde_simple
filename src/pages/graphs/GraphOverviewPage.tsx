@@ -4,7 +4,7 @@ import { VisualizerLayout } from '../../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../../components/workspace/TopicBreadcrumbs';
 import { 
   Share2, ArrowRight, GitFork, Compass, Zap, 
-  Route, ShieldAlert, Cpu, Sparkles 
+  Route, ShieldAlert, Cpu, Sparkles, Network, GitMerge 
 } from 'lucide-react';
 
 const GRAPH_ALGORITHMS = [
@@ -57,6 +57,26 @@ const GRAPH_ALGORITHMS = [
     icon: Route,
     color: 'from-emerald-500/10 to-teal-500/10 text-emerald-400 border-emerald-500/20',
     description: 'Computes shortest path distances between all pairs of vertices via 3 nested loops evaluating intermediate vertex detours.'
+  },
+  {
+    id: 'prims',
+    name: "Prim's Algorithm (MST)",
+    route: '/visualizer/graphs/prims',
+    badge: 'O((V + E) log V)',
+    category: 'Minimum Spanning Tree (Cut-Based)',
+    icon: Network,
+    color: 'from-cyan-500/10 to-teal-500/10 text-cyan-400 border-cyan-500/20',
+    description: 'Greedily grows a Minimum Spanning Tree from a starting cut using a min-priority queue to select the lightest connecting boundary edge.'
+  },
+  {
+    id: 'kruskals',
+    name: "Kruskal's Algorithm (MST)",
+    route: '/visualizer/graphs/kruskals',
+    badge: 'O(E log E)',
+    category: 'Minimum Spanning Tree (Disjoint-Set / Edge-Based)',
+    icon: GitMerge,
+    color: 'from-indigo-500/10 to-emerald-500/10 text-emerald-400 border-emerald-500/20',
+    description: 'Sorts all edges by ascending weight and greedily unites independent tree components using Disjoint-Set Union (Union-Find) with cycle detection.'
   }
 ];
 

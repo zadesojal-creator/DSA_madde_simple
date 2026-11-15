@@ -426,6 +426,86 @@ export const ALGORITHMS_METADATA: Record<string, AlgorithmMetadata> = {
       whenUseful: 'All-pairs path computation for dense or small graphs, transitive closure calculation, and all-pairs network delay matrices.'
     }
   },
+  'prims': {
+    id: 'prims',
+    category: 'graphs',
+    title: "Prim's Algorithm (MST)",
+    shortDescription: 'Greedy algorithm growing a Minimum Spanning Tree from a starting cut via min-priority queue.',
+    detailedDescription: "Constructs a Minimum Spanning Tree (MST) for a connected, weighted, undirected graph. Starting from a source vertex, Prim's algorithm iteratively extracts the minimum-weight cut edge connecting an in-tree vertex to an outside vertex using a min-priority queue, adding exactly V - 1 edges of minimal total weight.",
+    complexity: {
+      timeComplexity: {
+        best: 'E log V',
+        average: '(V + E) log V',
+        worst: '(V + E) log V',
+        description: 'With a binary min-heap, extracting minimum cut edges takes O(V log V) and updating key values takes O(E log V).'
+      },
+      spaceComplexity: {
+        worst: 'V + E',
+        description: 'O(V) for parent and key tracking arrays, plus O(E) for cut edge candidate priority queue storage.'
+      },
+      whenUseful: 'Dense graphs where edge density is high, telecommunications network design, and pipe/cable routing infrastructure.'
+    }
+  },
+  'prim': {
+    id: 'prim',
+    category: 'graphs',
+    title: "Prim's Algorithm (MST)",
+    shortDescription: 'Greedy algorithm growing a Minimum Spanning Tree from a starting cut via min-priority queue.',
+    detailedDescription: "Constructs a Minimum Spanning Tree (MST) for a connected, weighted, undirected graph. Starting from a source vertex, Prim's algorithm iteratively extracts the minimum-weight cut edge connecting an in-tree vertex to an outside vertex using a min-priority queue, adding exactly V - 1 edges of minimal total weight.",
+    complexity: {
+      timeComplexity: {
+        best: 'E log V',
+        average: '(V + E) log V',
+        worst: '(V + E) log V',
+        description: 'With a binary min-heap, extracting minimum cut edges takes O(V log V) and updating key values takes O(E log V).'
+      },
+      spaceComplexity: {
+        worst: 'V + E',
+        description: 'O(V) for parent and key tracking arrays, plus O(E) for cut edge candidate priority queue storage.'
+      },
+      whenUseful: 'Dense graphs where edge density is high, telecommunications network design, and pipe/cable routing infrastructure.'
+    }
+  },
+  'kruskals': {
+    id: 'kruskals',
+    category: 'graphs',
+    title: "Kruskal's Algorithm (MST)",
+    shortDescription: 'Greedy edge-sorting algorithm with Disjoint-Set Union (DSU / Union-Find) cycle detection.',
+    detailedDescription: 'Finds a Minimum Spanning Tree (MST) by sorting all graph edges in ascending order of weight. It iterates through each candidate edge and uses Disjoint-Set Union (Union-Find with path compression and union by rank) to detect whether adding the edge would form a cycle. Safe acyclic edges are merged into the spanning forest until V - 1 edges are selected.',
+    complexity: {
+      timeComplexity: {
+        best: 'E log E',
+        average: 'E log E',
+        worst: 'E log E',
+        description: 'Sorting E edges takes O(E log E) = O(E log V). DSU operations take near-linear O(E · α(V)) with inverse Ackermann α.'
+      },
+      spaceComplexity: {
+        worst: 'V + E',
+        description: 'O(V) for DSU parent and rank arrays, plus O(E) to store and sort the edge list.'
+      },
+      whenUseful: 'Sparse graphs where E << V², circuit design, cluster analysis, and approximations for NP-hard problems like Traveling Salesperson.'
+    }
+  },
+  'kruskal': {
+    id: 'kruskal',
+    category: 'graphs',
+    title: "Kruskal's Algorithm (MST)",
+    shortDescription: 'Greedy edge-sorting algorithm with Disjoint-Set Union (DSU / Union-Find) cycle detection.',
+    detailedDescription: 'Finds a Minimum Spanning Tree (MST) by sorting all graph edges in ascending order of weight. It iterates through each candidate edge and uses Disjoint-Set Union (Union-Find with path compression and union by rank) to detect whether adding the edge would form a cycle. Safe acyclic edges are merged into the spanning forest until V - 1 edges are selected.',
+    complexity: {
+      timeComplexity: {
+        best: 'E log E',
+        average: 'E log E',
+        worst: 'E log E',
+        description: 'Sorting E edges takes O(E log E) = O(E log V). DSU operations take near-linear O(E · α(V)) with inverse Ackermann α.'
+      },
+      spaceComplexity: {
+        worst: 'V + E',
+        description: 'O(V) for DSU parent and rank arrays, plus O(E) to store and sort the edge list.'
+      },
+      whenUseful: 'Sparse graphs where E << V², circuit design, cluster analysis, and approximations for NP-hard problems like Traveling Salesperson.'
+    }
+  },
 
   // ── Recursion ──────────────────────────────────────────────────────────────
   'factorial': {

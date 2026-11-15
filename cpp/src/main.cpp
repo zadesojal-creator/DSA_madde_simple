@@ -127,7 +127,9 @@ int main(int argc, char* argv[]) {
                       op == "dfs" || op == "graph-dfs" ||
                       op == "dijkstra" || op == "graph-dijkstra" ||
                       op == "bellman-ford" || op == "graph-bellman-ford" ||
-                      op == "floyd-warshall" || op == "graph-floyd-warshall");
+                      op == "floyd-warshall" || op == "graph-floyd-warshall" ||
+                      op == "prims" || op == "graph-prims" || op == "prim" ||
+                      op == "kruskals" || op == "graph-kruskals" || op == "kruskal");
 
     bool isRecursionOp = (op == "factorial" || op == "fibonacci" ||
                           op == "tower-of-hanoi" || op == "maze" || op == "n-queens");
@@ -295,6 +297,17 @@ int main(int argc, char* argv[]) {
         int src = hasSource ? source : (hasValue ? value : 0);
         int targetV = hasTarget ? target : -1;
         traceFloydWarshall(g, src, targetV, emitter);
+    } else if (op == "prims" || op == "graph-prims" || op == "prim") {
+        CppGraph g = (arrStr == "sample" || arrStr.empty()) 
+            ? createSampleGraph("prims") 
+            : parseGraphFromTokens(vertexCount, directed, weighted, arrStr);
+        int src = hasSource ? source : (hasValue ? value : 0);
+        tracePrims(g, src, emitter);
+    } else if (op == "kruskals" || op == "graph-kruskals" || op == "kruskal") {
+        CppGraph g = (arrStr == "sample" || arrStr.empty()) 
+            ? createSampleGraph("kruskals") 
+            : parseGraphFromTokens(vertexCount, directed, weighted, arrStr);
+        traceKruskals(g, emitter);
     }
     // Recursion: Factorial
     else if (op == "factorial") {

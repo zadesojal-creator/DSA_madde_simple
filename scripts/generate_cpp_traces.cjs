@@ -83,6 +83,8 @@ const configs = [
   { op: 'dijkstra', arr: 'sample', target: 4, source: 0 },
   { op: 'bellman-ford', arr: 'sample', target: 4, source: 0 },
   { op: 'floyd-warshall', arr: 'sample', target: 3, source: 0 },
+  { op: 'prims', arr: 'sample', target: 5, source: 0 },
+  { op: 'kruskals', arr: 'sample', target: 5, source: 0 },
 
   // Recursion algorithms
   { op: 'factorial', arr: '5', target: 5, value: 5 },
@@ -137,7 +139,7 @@ const ops = [
   'binary-search-tree', 'bst-insert', 'bst-search', 'bst-delete', 'bst-min', 'bst-max',
   'min-heap', 'min-heap-build', 'min-heap-insert',
   'max-heap', 'max-heap-build', 'max-heap-insert',
-  'bfs', 'dfs', 'dijkstra', 'bellman-ford', 'floyd-warshall',
+  'bfs', 'dfs', 'dijkstra', 'bellman-ford', 'floyd-warshall', 'prims', 'kruskals',
   'factorial', 'fibonacci', 'tower-of-hanoi', 'maze', 'n-queens'
 ];
 for (const op of ops) {

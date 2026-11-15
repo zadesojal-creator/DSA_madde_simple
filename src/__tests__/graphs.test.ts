@@ -161,10 +161,10 @@ describe('Graph Algorithms Visualizer (C++ Single Source of Truth)', () => {
   });
 
   describe('Navigation & Canonical C++ Code', () => {
-    it('registers all 5 graph algorithms in navigation data', () => {
+    it('registers all 7 graph algorithms in navigation data', () => {
       const graphCategory = NAVIGATION_CATEGORIES.find((c) => c.id === 'graphs');
       expect(graphCategory).toBeDefined();
-      expect(graphCategory?.subtopics.length).toBe(5);
+      expect(graphCategory?.subtopics.length).toBe(7);
 
       const routes = graphCategory?.subtopics.map((s) => s.route);
       expect(routes).toContain('/visualizer/graphs/bfs');
@@ -172,6 +172,8 @@ describe('Graph Algorithms Visualizer (C++ Single Source of Truth)', () => {
       expect(routes).toContain('/visualizer/graphs/dijkstra');
       expect(routes).toContain('/visualizer/graphs/bellman-ford');
       expect(routes).toContain('/visualizer/graphs/floyd-warshall');
+      expect(routes).toContain('/visualizer/graphs/prims');
+      expect(routes).toContain('/visualizer/graphs/kruskals');
     });
 
     it('provides genuine C++ source code for each algorithm', () => {
@@ -208,6 +210,98 @@ describe('Graph Algorithms Visualizer (C++ Single Source of Truth)', () => {
       const floydMeta = ALGORITHMS_METADATA['floyd-warshall'];
       expect(floydMeta.complexity.timeComplexity.worst).toBe('V³');
       expect(floydMeta.complexity.spaceComplexity.worst).toBe('V²');
+
+      const primsMeta = ALGORITHMS_METADATA['prims'];
+      expect(primsMeta.title).toContain("Prim's Algorithm");
+      expect(primsMeta.complexity.timeComplexity.worst).toContain('log V');
+
+      const kruskalsMeta = ALGORITHMS_METADATA['kruskals'];
+      expect(kruskalsMeta.title).toContain("Kruskal's Algorithm");
+      expect(kruskalsMeta.complexity.timeComplexity.worst).toContain('log E');
+    });
+
+    it('verifies Prim and Kruskal navigation registration', () => {
+      const graphCategory = NAVIGATION_CATEGORIES.find((c) => c.id === 'graphs');
+      expect(graphCategory).toBeDefined();
+      const subtopics = graphCategory?.subtopics.map((s) => s.id);
+      expect(subtopics).toContain('prims');
+      expect(subtopics).toContain('kruskals');
+    });
+  });
+
+  describe("Prim's Algorithm (MST)", () => {
+    it('executes Prim on standard sample and computes total MST weight of 13', async () => {
+      const res = await executeCppGraphAlgorithm('prims', 'sample', { source: 0, target: 5 });
+      expect(res.steps.length).toBeGreaterThan(5);
+
+      const first = res.steps[0];
+      expect(first.eventType).toBe('initialize');
+      expect(first.title).toContain("Prim's MST Initialized");
+      expect(first.graphVertices?.length).toBe(6);
+
+      const last = res.steps[res.steps.length - 1];
+      expect(last.isCompleted).toBe(true);
+      expect(last.title).toContain('MST Weight: 13');
+      expect(last.variables?.totalWeight).toBe('13');
+      expect(last.variables?.mstEdgesCount).toBe('5');
+
+      // Verify cut candidate exploration
+      const cutSteps = res.steps.filter((s) => s.eventType === 'cut_edge_discover');
+      expect(cutSteps.length).toBeGreaterThan(0);
+
+      // Verify tree edge additions
+      const mstSteps = res.steps.filter((s) => s.eventType === 'edge_add_mst');
+      expect(mstSteps.length).toBe(5);
+
+      // Verify all vertices ended up in MST (visited)
+      const finalVertices = last.graphVertices || [];
+      expect(finalVertices.every((v) => v.state === 'visited')).toBe(true);
+    });
+
+    it('provides canonical C++ implementation for Prim algorithm', () => {
+      const code = getAlgorithmCppCode('prims');
+      expect(code).toContain('void primsMST');
+      expect(code).toContain('std::priority_queue');
+      expect(code).toContain('inMST');
+    });
+  });
+
+  describe("Kruskal's Algorithm (MST)", () => {
+    it('executes Kruskal on standard sample and computes total MST weight of 13', async () => {
+      const res = await executeCppGraphAlgorithm('kruskals', 'sample', { source: 0, target: 5 });
+      expect(res.steps.length).toBeGreaterThan(5);
+
+      const first = res.steps[0];
+      expect(first.eventType).toBe('initialize');
+      expect(first.title).toContain("Kruskal's MST Initialized");
+      expect(first.graphVertices?.length).toBe(6);
+
+      // Verify cycle detection occurred for edge (0, 1, w=4)
+      const cycleSteps = res.steps.filter((s) => s.eventType === 'cycle_detected');
+      expect(cycleSteps.length).toBeGreaterThan(0);
+      expect(cycleSteps[0].description).toContain('already share root');
+
+      // Verify accepted MST edges
+      const acceptedSteps = res.steps.filter((s) => s.eventType === 'edge_accepted');
+      expect(acceptedSteps.length).toBe(5);
+
+      const last = res.steps[res.steps.length - 1];
+      expect(last.isCompleted).toBe(true);
+      expect(last.title).toContain('MST Weight: 13');
+      expect(last.variables?.totalWeight).toBe('13');
+      expect(last.variables?.mstEdgesCount).toBe('5');
+
+      // Verify discarded edge has state "discarded"
+      const finalEdges = last.graphEdges || [];
+      const discardedEdge = finalEdges.find((e) => (e.u === 0 && e.v === 1) || (e.u === 1 && e.v === 0));
+      expect(discardedEdge?.state).toBe('discarded');
+    });
+
+    it('provides canonical C++ implementation for Kruskal algorithm', () => {
+      const code = getAlgorithmCppCode('kruskals');
+      expect(code).toContain('void kruskalsMST');
+      expect(code).toContain('DSU');
+      expect(code).toContain('sort');
     });
   });
 });

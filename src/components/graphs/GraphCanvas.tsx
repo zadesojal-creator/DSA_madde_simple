@@ -184,9 +184,12 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
             const isCurrentExamined =
               (activeEdgeU === e.u && activeEdgeV === e.v) ||
-              (!e.directed && activeEdgeU === e.v && activeEdgeV === e.u);
+              (!e.directed && activeEdgeU === e.v && activeEdgeV === e.u) ||
+              e.state === 'active';
 
-            const isShortestPath = isPathEdge(e.u, e.v, e.directed);
+            const isMstEdge = e.state === 'mst';
+            const isDiscarded = e.state === 'discarded' || e.state === 'cycle';
+            const isShortestPath = isMstEdge || e.state === 'path' || isPathEdge(e.u, e.v, e.directed);
 
             // Self loop handling
             if (e.u === e.v) {
@@ -196,8 +199,9 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                   <path
                     d={loopPath}
                     fill="none"
-                    stroke={isCurrentExamined ? '#06b6d4' : isShortestPath ? '#10b981' : '#475569'}
-                    strokeWidth={isCurrentExamined || isShortestPath ? 3 : 1.5}
+                    stroke={isDiscarded ? '#f43f5e' : isShortestPath ? '#10b981' : isCurrentExamined ? '#06b6d4' : '#475569'}
+                    strokeWidth={isShortestPath ? 3.5 : isCurrentExamined ? 3 : 1.5}
+                    strokeDasharray={isDiscarded ? '4 4' : undefined}
                     markerEnd={e.directed ? (isShortestPath ? 'url(#arrow-path)' : isCurrentExamined ? 'url(#arrow-active)' : 'url(#arrow-normal)') : undefined}
                   />
                   {e.weight !== 1 && (
@@ -231,11 +235,13 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
 
             const strokeColor = isShortestPath
               ? '#10b981'
+              : isDiscarded
+              ? '#f43f5e'
               : isCurrentExamined
               ? '#06b6d4'
               : '#475569';
 
-            const strokeWidth = isShortestPath ? 3.5 : isCurrentExamined ? 3 : 1.75;
+            const strokeWidth = isShortestPath ? 3.5 : isCurrentExamined ? 3 : isDiscarded ? 2.5 : 1.75;
             const marker = e.directed
               ? isShortestPath
                 ? 'url(#arrow-path)'
@@ -253,13 +259,14 @@ export const GraphCanvas: React.FC<GraphCanvasProps> = ({
                   y2={endY}
                   stroke={strokeColor}
                   strokeWidth={strokeWidth}
+                  strokeDasharray={isDiscarded ? '5 4' : undefined}
                   strokeLinecap="round"
                   markerEnd={marker}
                   filter={isShortestPath || isCurrentExamined ? 'url(#glow)' : undefined}
                 />
 
                 {/* Edge weight badge if weighted or non-1 */}
-                {(e.weight !== 1 || algorithmId === 'dijkstra' || algorithmId === 'bellman-ford' || algorithmId === 'floyd-warshall') && (
+                {(e.weight !== 1 || algorithmId === 'dijkstra' || algorithmId === 'bellman-ford' || algorithmId === 'floyd-warshall' || algorithmId === 'prims' || algorithmId === 'prim' || algorithmId === 'kruskals' || algorithmId === 'kruskal') && (
                   <g transform={`translate(${midX}, ${midY})`}>
                     <rect
                       x={-14}

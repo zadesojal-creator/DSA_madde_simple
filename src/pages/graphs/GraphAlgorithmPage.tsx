@@ -109,6 +109,78 @@ const DEFAULT_CONFIGS: Record<string, DefaultGraphConfig> = {
     ],
     source: 0,
     target: 3
+  },
+  prims: {
+    vertexCount: 6,
+    directed: false,
+    weighted: true,
+    edges: [
+      { u: 0, v: 1, weight: 4 },
+      { u: 0, v: 2, weight: 2 },
+      { u: 1, v: 2, weight: 1 },
+      { u: 1, v: 3, weight: 5 },
+      { u: 2, v: 3, weight: 8 },
+      { u: 2, v: 4, weight: 10 },
+      { u: 3, v: 4, weight: 2 },
+      { u: 3, v: 5, weight: 6 },
+      { u: 4, v: 5, weight: 3 }
+    ],
+    source: 0,
+    target: 5
+  },
+  prim: {
+    vertexCount: 6,
+    directed: false,
+    weighted: true,
+    edges: [
+      { u: 0, v: 1, weight: 4 },
+      { u: 0, v: 2, weight: 2 },
+      { u: 1, v: 2, weight: 1 },
+      { u: 1, v: 3, weight: 5 },
+      { u: 2, v: 3, weight: 8 },
+      { u: 2, v: 4, weight: 10 },
+      { u: 3, v: 4, weight: 2 },
+      { u: 3, v: 5, weight: 6 },
+      { u: 4, v: 5, weight: 3 }
+    ],
+    source: 0,
+    target: 5
+  },
+  kruskals: {
+    vertexCount: 6,
+    directed: false,
+    weighted: true,
+    edges: [
+      { u: 0, v: 1, weight: 4 },
+      { u: 0, v: 2, weight: 2 },
+      { u: 1, v: 2, weight: 1 },
+      { u: 1, v: 3, weight: 5 },
+      { u: 2, v: 3, weight: 8 },
+      { u: 2, v: 4, weight: 10 },
+      { u: 3, v: 4, weight: 2 },
+      { u: 3, v: 5, weight: 6 },
+      { u: 4, v: 5, weight: 3 }
+    ],
+    source: 0,
+    target: 5
+  },
+  kruskal: {
+    vertexCount: 6,
+    directed: false,
+    weighted: true,
+    edges: [
+      { u: 0, v: 1, weight: 4 },
+      { u: 0, v: 2, weight: 2 },
+      { u: 1, v: 2, weight: 1 },
+      { u: 1, v: 3, weight: 5 },
+      { u: 2, v: 3, weight: 8 },
+      { u: 2, v: 4, weight: 10 },
+      { u: 3, v: 4, weight: 2 },
+      { u: 3, v: 5, weight: 6 },
+      { u: 4, v: 5, weight: 3 }
+    ],
+    source: 0,
+    target: 5
   }
 };
 

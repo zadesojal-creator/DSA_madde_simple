@@ -59,6 +59,10 @@ export const App: React.FC = () => {
       <Route path="/visualizer/graphs/dijkstra" element={<GraphAlgorithmPage algorithm="dijkstra" />} />
       <Route path="/visualizer/graphs/bellman-ford" element={<GraphAlgorithmPage algorithm="bellman-ford" />} />
       <Route path="/visualizer/graphs/floyd-warshall" element={<GraphAlgorithmPage algorithm="floyd-warshall" />} />
+      <Route path="/visualizer/graphs/prims" element={<GraphAlgorithmPage algorithm="prims" />} />
+      <Route path="/visualizer/graphs/kruskals" element={<GraphAlgorithmPage algorithm="kruskals" />} />
+      <Route path="/visualizer/graphs/prim" element={<Navigate to="/visualizer/graphs/prims" replace />} />
+      <Route path="/visualizer/graphs/kruskal" element={<Navigate to="/visualizer/graphs/kruskals" replace />} />
       <Route path="/visualizer/graphs/:algorithmId" element={<GraphAlgorithmPage />} />
 
       {/* Recursion Routes (Prompt 09) */}

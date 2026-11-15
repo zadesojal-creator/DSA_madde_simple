@@ -70,7 +70,11 @@ export const GraphLegend: React.FC = () => {
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-6 h-1 bg-emerald-500 rounded"></div>
-          <span>Relaxed / Shortest Path Edge</span>
+          <span>MST / Shortest Path Edge</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-6 h-0.5 border-t-2 border-dashed border-rose-500"></div>
+          <span>Cycle / Discarded Edge</span>
         </div>
         <div className="flex items-center gap-1.5">
           <ArrowRight className="w-3.5 h-3.5 text-slate-500" />

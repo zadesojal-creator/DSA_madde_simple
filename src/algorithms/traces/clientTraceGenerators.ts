@@ -1,4 +1,11 @@
-import type { TraceStep, LinkedNodeSnapshot, TreeNodeSnapshot, PointerInfo } from '../../types/trace';
+import type { 
+  TraceStep, 
+  LinkedNodeSnapshot, 
+  TreeNodeSnapshot, 
+  PointerInfo,
+  GraphVertexSnapshot,
+  GraphEdgeSnapshot
+} from '../../types/trace';
 
 // ============================================================================
 // 1. LINKED LIST TRACE GENERATOR
@@ -2366,5 +2373,416 @@ export function generateBstTrace(
     rootId: 1,
     isCompleted: true
   });
+  return steps;
+}
+
+// ============================================================================
+// 5. GRAPH ALGORITHMS TRACE GENERATOR (PRIM'S & KRUSKAL'S)
+// ============================================================================
+
+export interface GraphTraceGeneratorParams {
+  algorithm: string;
+  vertexCount: number;
+  edges: { u: number; v: number; weight: number }[];
+  directed?: boolean;
+  weighted?: boolean;
+  source?: number;
+  target?: number;
+}
+
+export function generateGraphTrace(params: GraphTraceGeneratorParams): TraceStep[] {
+  const { algorithm, vertexCount, edges, source = 0 } = params;
+  const isKruskal = algorithm === 'kruskals' || algorithm === 'kruskal';
+  const steps: TraceStep[] = [];
+  let stepId = 0;
+
+  // Build unique undirected edges
+  interface UniqueEdge {
+    u: number;
+    v: number;
+    w: number;
+    id: number;
+  }
+  const uniqueEdges: UniqueEdge[] = [];
+  const seenMap = new Map<string, number>();
+  edges.forEach((e) => {
+    const small = Math.min(e.u, e.v);
+    const big = Math.max(e.u, e.v);
+    const key = `${small}-${big}`;
+    if (!seenMap.has(key)) {
+      const id = uniqueEdges.length;
+      seenMap.set(key, id);
+      uniqueEdges.push({ u: small, v: big, w: e.weight ?? 1, id });
+    }
+  });
+
+  const edgeStates = new Array<string>(uniqueEdges.length).fill('normal');
+  const vStates = new Array<string>(vertexCount).fill('unvisited');
+  const keyArr = new Array<number>(vertexCount).fill(1000000000);
+  const parentArr = new Array<number>(vertexCount).fill(-1);
+
+  const captureSnapshot = (): { vertices: GraphVertexSnapshot[]; edges: GraphEdgeSnapshot[] } => {
+    const snapVertices: GraphVertexSnapshot[] = [];
+    for (let i = 0; i < vertexCount; i++) {
+      const dist = keyArr[i];
+      const hasDist = dist !== 1000000000 && dist >= 0;
+      snapVertices.push({
+        id: i,
+        label: String(i),
+        state: vStates[i],
+        distance: dist,
+        hasDistance: hasDist,
+        predecessor: parentArr[i],
+        discoveryTime: -1,
+        finishTime: -1
+      });
+    }
+
+    const snapEdges: GraphEdgeSnapshot[] = uniqueEdges.map((e, idx) => ({
+      u: e.u,
+      v: e.v,
+      weight: e.w,
+      directed: false,
+      state: edgeStates[idx]
+    }));
+
+    return { vertices: snapVertices, edges: snapEdges };
+  };
+
+  if (isKruskal) {
+    // ---------------- Kruskal's MST ----------------
+    // Sort edges ascending by weight
+    const sortedEdges = [...uniqueEdges].sort((a, b) => a.w - b.w || a.u - b.u || a.v - b.v);
+    const dsuParent = Array.from({ length: vertexCount }, (_, i) => i);
+    const dsuRank = new Array(vertexCount).fill(0);
+
+    const findRoot = (i: number): number => {
+      if (dsuParent[i] === i) return i;
+      dsuParent[i] = findRoot(dsuParent[i]);
+      return dsuParent[i];
+    };
+
+    const unionSets = (rootA: number, rootB: number) => {
+      if (rootA !== rootB) {
+        if (dsuRank[rootA] < dsuRank[rootB]) {
+          dsuParent[rootA] = rootB;
+        } else if (dsuRank[rootA] > dsuRank[rootB]) {
+          dsuParent[rootB] = rootA;
+        } else {
+          dsuParent[rootB] = rootA;
+          dsuRank[rootA]++;
+        }
+      }
+    };
+
+    let totalWeight = 0;
+    let mstEdgesCount = 0;
+    let edgesEvaluated = 0;
+
+    const edgeStatusTokens = sortedEdges.map((e) => `${e.u}—${e.v} (w=${e.w})`);
+
+    // Init step
+    const initSnap = captureSnapshot();
+    steps.push({
+      id: stepId++,
+      stepIndex: steps.length,
+      eventType: 'initialize',
+      title: `Kruskal's MST Initialized — Sorted ${sortedEdges.length} Edges`,
+      description: `All edges sorted in non-decreasing order of weight. Each of the ${vertexCount} vertices begins in its own independent Disjoint Set.`,
+      activeLine: 4,
+      sourceLine: 4,
+      graphVertices: initSnap.vertices,
+      graphEdges: initSnap.edges,
+      priorityQueueState: [...edgeStatusTokens],
+      variables: {
+        totalWeight: '0',
+        mstEdgesCount: '0',
+        edgesEvaluated: '0',
+        cycleStatus: `Initialized DSU forest: ${vertexCount} single-vertex components`
+      },
+      isCompleted: false
+    });
+
+    for (let i = 0; i < sortedEdges.length; i++) {
+      const edge = sortedEdges[i];
+      const { u, v, w, id: eIdx } = edge;
+      edgesEvaluated++;
+
+      edgeStates[eIdx] = 'active';
+      edgeStatusTokens[i] = `${u}—${v} [active w=${w}]`;
+
+      const rootU = findRoot(u);
+      const rootV = findRoot(v);
+
+      const examineSnap = captureSnapshot();
+      steps.push({
+        id: stepId++,
+        stepIndex: steps.length,
+        eventType: 'edge_examine',
+        title: `Examine Edge (${u} — ${v}, w=${w})`,
+        description: `Checking DSU sets: find(${u}) = ${rootU}, find(${v}) = ${rootV}.`,
+        activeLine: 8,
+        sourceLine: 8,
+        activeEdgeU: u,
+        activeEdgeV: v,
+        graphVertices: examineSnap.vertices,
+        graphEdges: examineSnap.edges,
+        priorityQueueState: [...edgeStatusTokens],
+        variables: {
+          totalWeight: String(totalWeight),
+          mstEdgesCount: String(mstEdgesCount),
+          edgesEvaluated: String(edgesEvaluated),
+          rootU: String(rootU),
+          rootV: String(rootV),
+          cycleStatus: `find(${u})=${rootU}, find(${v})=${rootV}`
+        },
+        isCompleted: false
+      });
+
+      if (rootU === rootV) {
+        // Cycle!
+        edgeStates[eIdx] = 'discarded';
+        edgeStatusTokens[i] = `${u}—${v} (w=${w}) ✗ cycle`;
+
+        const cycleSnap = captureSnapshot();
+        steps.push({
+          id: stepId++,
+          stepIndex: steps.length,
+          eventType: 'cycle_detected',
+          title: `Cycle Detected! Discard Edge (${u} — ${v})`,
+          description: `Both vertices ${u} and ${v} already share root ${rootU} in the same component. Adding this edge would form a cycle! Discarding.`,
+          activeLine: 12,
+          sourceLine: 12,
+          activeEdgeU: u,
+          activeEdgeV: v,
+          graphVertices: cycleSnap.vertices,
+          graphEdges: cycleSnap.edges,
+          priorityQueueState: [...edgeStatusTokens],
+          variables: {
+            totalWeight: String(totalWeight),
+            mstEdgesCount: String(mstEdgesCount),
+            edgesEvaluated: String(edgesEvaluated),
+            cycleStatus: `CYCLE DETECTED: Vertices ${u} and ${v} already connected (Root ${rootU}) -> Discarded`
+          },
+          isCompleted: false
+        });
+      } else {
+        // Safe!
+        unionSets(rootU, rootV);
+        totalWeight += w;
+        mstEdgesCount++;
+        edgeStates[eIdx] = 'mst';
+        vStates[u] = 'visited';
+        vStates[v] = 'visited';
+        parentArr[u] = rootV;
+        parentArr[v] = rootV;
+        edgeStatusTokens[i] = `${u}—${v} (w=${w}) ✓ mst`;
+
+        const acceptSnap = captureSnapshot();
+        steps.push({
+          id: stepId++,
+          stepIndex: steps.length,
+          eventType: 'edge_accepted',
+          title: `Edge Accepted! (${u} — ${v}, w=${w}) Added to MST`,
+          description: `Components with roots ${rootU} and ${rootV} unified. Spanning tree now contains ${mstEdgesCount} edges. Total weight = ${totalWeight}.`,
+          activeLine: 15,
+          sourceLine: 15,
+          activeEdgeU: u,
+          activeEdgeV: v,
+          graphVertices: acceptSnap.vertices,
+          graphEdges: acceptSnap.edges,
+          priorityQueueState: [...edgeStatusTokens],
+          variables: {
+            totalWeight: String(totalWeight),
+            mstEdgesCount: String(mstEdgesCount),
+            edgesEvaluated: String(edgesEvaluated),
+            cycleStatus: `EDGE ACCEPTED: Unified Component(${rootU}) with Component(${rootV})`
+          },
+          isCompleted: false
+        });
+
+        if (mstEdgesCount === vertexCount - 1) {
+          break;
+        }
+      }
+    }
+
+    const finalSnap = captureSnapshot();
+    steps.push({
+      id: stepId++,
+      stepIndex: steps.length,
+      eventType: 'complete',
+      title: `Kruskal's Algorithm Complete — MST Weight: ${totalWeight}`,
+      description: `Minimum Spanning Tree construction complete with exactly ${mstEdgesCount} edges. All ${vertexCount} vertices connected with total minimal weight of ${totalWeight}.`,
+      activeLine: 18,
+      sourceLine: 18,
+      graphVertices: finalSnap.vertices,
+      graphEdges: finalSnap.edges,
+      priorityQueueState: [...edgeStatusTokens],
+      variables: {
+        totalWeight: String(totalWeight),
+        mstEdgesCount: String(mstEdgesCount),
+        edgesEvaluated: String(edgesEvaluated),
+        cycleStatus: `MST Completed: Total Weight = ${totalWeight}`
+      },
+      isCompleted: true
+    });
+
+    return steps;
+  }
+
+  // ---------------- Prim's MST ----------------
+  const validSource = source >= 0 && source < vertexCount ? source : 0;
+  keyArr[validSource] = 0;
+  vStates[validSource] = 'active';
+
+  interface CutQueueItem {
+    w: number;
+    u: number;
+    v: number;
+  }
+  const pq: CutQueueItem[] = [{ w: 0, u: -1, v: validSource }];
+  const inMST = new Array<boolean>(vertexCount).fill(false);
+
+  let totalWeight = 0;
+  let mstEdgesCount = 0;
+
+  const getPqStrings = (): string[] => {
+    return [...pq]
+      .filter((item) => item.u !== -1)
+      .sort((a, b) => a.w - b.w)
+      .map((item) => `(${item.u}—${item.v}, w=${item.w})`);
+  };
+
+  const initSnap = captureSnapshot();
+  steps.push({
+    id: stepId++,
+    stepIndex: steps.length,
+    eventType: 'initialize',
+    title: `Prim's MST Initialized at Root ${validSource}`,
+    description: `Growing tree from root vertex ${validSource}. Key initialized to 0; all other keys = ∞.`,
+    activeLine: 4,
+    sourceLine: 4,
+    activeVertexId: validSource,
+    graphVertices: initSnap.vertices,
+    graphEdges: initSnap.edges,
+    priorityQueueState: getPqStrings(),
+    variables: {
+      totalWeight: '0',
+      mstEdgesCount: '0'
+    },
+    isCompleted: false
+  });
+
+  while (pq.length > 0 && mstEdgesCount < vertexCount) {
+    pq.sort((a, b) => a.w - b.w);
+    const current = pq.shift()!;
+    const { w, u, v } = current;
+
+    if (inMST[v]) continue;
+
+    inMST[v] = true;
+    vStates[v] = 'visited';
+    if (u !== -1) {
+      totalWeight += w;
+      mstEdgesCount++;
+      const small = Math.min(u, v);
+      const big = Math.max(u, v);
+      const key = `${small}-${big}`;
+      const eIdx = seenMap.get(key);
+      if (eIdx !== undefined) {
+        edgeStates[eIdx] = 'mst';
+      }
+    }
+
+    const treeSnap = captureSnapshot();
+    steps.push({
+      id: stepId++,
+      stepIndex: steps.length,
+      eventType: u === -1 ? 'vertex_start' : 'edge_add_mst',
+      title: u === -1
+        ? `Root Vertex ${v} Included in MST`
+        : `Add Minimum Cut Edge (${u} — ${v}, w=${w}) to MST`,
+      description: u === -1
+        ? `Root vertex ${v} enters the spanning tree. Now discovering incident cut edges.`
+        : `Lightest boundary cut edge selected! Vertex ${v} united into MST. Total MST weight is now ${totalWeight}.`,
+      activeLine: 8,
+      sourceLine: 8,
+      activeVertexId: v,
+      activeEdgeU: u !== -1 ? u : undefined,
+      activeEdgeV: u !== -1 ? v : undefined,
+      graphVertices: treeSnap.vertices,
+      graphEdges: treeSnap.edges,
+      priorityQueueState: getPqStrings(),
+      variables: {
+        totalWeight: String(totalWeight),
+        mstEdgesCount: String(mstEdgesCount)
+      },
+      isCompleted: false
+    });
+
+    // Check neighbors
+    for (const e of uniqueEdges) {
+      if (e.u !== v && e.v !== v) continue;
+      const to = e.u === v ? e.v : e.u;
+      const edgeWeight = e.w;
+
+      if (!inMST[to]) {
+        let keyUpdated = false;
+        if (edgeWeight < keyArr[to]) {
+          keyArr[to] = edgeWeight;
+          parentArr[to] = v;
+          keyUpdated = true;
+        }
+
+        pq.push({ w: edgeWeight, u: v, v: to });
+
+        const cutSnap = captureSnapshot();
+        steps.push({
+          id: stepId++,
+          stepIndex: steps.length,
+          eventType: 'cut_edge_discover',
+          title: `Inspect Boundary Edge (${v} — ${to}, w=${edgeWeight})`,
+          description: keyUpdated
+            ? `Vertex ${to} key decreased to ${edgeWeight} via parent ${v}. Pushed cut edge to min-heap.`
+            : `Pushed alternative cut edge (${v} — ${to}, w=${edgeWeight}) to min-heap.`,
+          activeLine: 12,
+          sourceLine: 12,
+          activeVertexId: v,
+          activeEdgeU: v,
+          activeEdgeV: to,
+          graphVertices: cutSnap.vertices,
+          graphEdges: cutSnap.edges,
+          priorityQueueState: getPqStrings(),
+          variables: {
+            totalWeight: String(totalWeight),
+            mstEdgesCount: String(mstEdgesCount)
+          },
+          isCompleted: false
+        });
+      }
+    }
+  }
+
+  const finalSnap = captureSnapshot();
+  steps.push({
+    id: stepId++,
+    stepIndex: steps.length,
+    eventType: 'complete',
+    title: `Prim's Algorithm Complete — MST Weight: ${totalWeight}`,
+    description: `Minimum Spanning Tree successfully constructed with ${mstEdgesCount} edges and total minimal weight of ${totalWeight}.`,
+    activeLine: 16,
+    sourceLine: 16,
+    activeVertexId: -1,
+    graphVertices: finalSnap.vertices,
+    graphEdges: finalSnap.edges,
+    priorityQueueState: [],
+    variables: {
+      totalWeight: String(totalWeight),
+      mstEdgesCount: String(mstEdgesCount)
+    },
+    isCompleted: true
+  });
+
   return steps;
 }

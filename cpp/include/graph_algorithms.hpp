@@ -58,6 +58,8 @@ void traceDfs(const CppGraph& g, int startVertex, TraceEmitter& emitter);
 void traceDijkstra(const CppGraph& g, int sourceVertex, int targetVertex, TraceEmitter& emitter);
 void traceBellmanFord(const CppGraph& g, int sourceVertex, int targetVertex, TraceEmitter& emitter);
 void traceFloydWarshall(const CppGraph& g, int sourceVertex, int targetVertex, TraceEmitter& emitter);
+void tracePrims(const CppGraph& g, int startVertex, TraceEmitter& emitter);
+void traceKruskals(const CppGraph& g, TraceEmitter& emitter);
 
 // Canonical C++ Source Code Provider
 std::string getGraphSourceCode(const std::string& op);
