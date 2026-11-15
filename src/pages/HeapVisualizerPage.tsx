@@ -85,6 +85,22 @@ export const HeapVisualizerPage: React.FC<HeapVisualizerPageProps> = ({
   const handleExecuteOperation = (op: string, val?: number) => {
     setActiveOp(op);
     if (val !== undefined) setInsertVal(val);
+
+    // Live array updates for chained heap modifications
+    if (op.includes('-insert') && val !== undefined) {
+      const current = validationResult.array;
+      setInputArrayStr([...current, val].join(','));
+    } else if (op.includes('-extract')) {
+      const current = validationResult.array;
+      if (current.length > 0) {
+        setInputArrayStr(current.slice(1).join(',') || '');
+      }
+    } else if (op.includes('-delete') && val !== undefined) {
+      const current = validationResult.array;
+      const next = current.filter(x => x !== val);
+      setInputArrayStr(next.join(',') || '');
+    }
+
     setExecCount(c => c + 1);
   };
 

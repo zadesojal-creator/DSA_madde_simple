@@ -74,6 +74,17 @@ export const BinaryTreeVisualizerPage: React.FC = () => {
     setActiveOp(op);
     if (target !== undefined) setTargetVal(target);
     if (val !== undefined) setInsertVal(val);
+
+    // Live tree state updates for chained operations
+    if (op === 'tree-insert' && val !== undefined) {
+      const currentTokens = validationResult.tokens;
+      setInputTokens([...currentTokens, String(val)].join(','));
+    } else if (op === 'tree-delete' && target !== undefined) {
+      const currentTokens = validationResult.tokens;
+      const nextTokens = currentTokens.filter(t => t !== String(target));
+      setInputTokens(nextTokens.join(',') || '');
+    }
+
     setExecCount(c => c + 1);
   };
 

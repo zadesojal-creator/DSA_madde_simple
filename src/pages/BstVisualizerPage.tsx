@@ -76,6 +76,19 @@ export const BstVisualizerPage: React.FC = () => {
     setActiveOp(op);
     if (target !== undefined) setTargetVal(target);
     if (val !== undefined) setInsertVal(val);
+
+    // Live BST keys update for chained operations
+    if (op === 'bst-insert' && val !== undefined) {
+      const current = validationResult.array;
+      if (!current.includes(val)) {
+        setInputArrayStr([...current, val].join(','));
+      }
+    } else if (op === 'bst-delete' && target !== undefined) {
+      const current = validationResult.array;
+      const next = current.filter(k => k !== target);
+      setInputArrayStr(next.join(',') || '');
+    }
+
     setExecCount(c => c + 1);
   };
 

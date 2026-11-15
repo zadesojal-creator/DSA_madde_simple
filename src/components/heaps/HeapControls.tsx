@@ -4,7 +4,9 @@ import {
   ArrowDownToLine, 
   Eye, 
   AlertCircle,
-  Hammer
+  Hammer,
+  Trash2,
+  ArrowDownUp
 } from 'lucide-react';
 
 interface HeapControlsProps {
@@ -155,6 +157,29 @@ export const HeapControls: React.FC<HeapControlsProps> = ({
         >
           <Eye className="w-3.5 h-3.5 text-slate-500" />
           Peek Root O(1)
+        </button>
+
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            const val = handleValidateNumber(insertValue, 'Delete element');
+            if (val !== null) onExecute(`${prefix}-delete`, val);
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors disabled:opacity-50"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+          Delete Element ({insertValue})
+        </button>
+
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onExecute(`${prefix}-build`)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50"
+        >
+          <ArrowDownUp className="w-3.5 h-3.5 text-slate-500" />
+          Heapify All
         </button>
       </div>
     </div>

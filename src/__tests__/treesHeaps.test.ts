@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeCppAlgorithm, parseTreeTokensInput } from '../services/cppExecutionAdapter';
+import { executeCppAlgorithm, executeCppLinearStructure, parseTreeTokensInput } from '../services/cppExecutionAdapter';
 import { ALGORITHMS_METADATA } from '../data/algorithmsMetadata';
 import { NAVIGATION_CATEGORIES } from '../data/navigationData';
 
@@ -72,6 +72,28 @@ describe('Trees & Heaps Visualizer (C++ Single Source of Truth)', () => {
 
       const leavesRes = await executeCppAlgorithm('tree-leaves', ['1', '2', '3', '4', '5'], 0);
       expect(leavesRes.steps[leavesRes.steps.length - 1].variables?.leafCount).toBe('3');
+    });
+
+    it('builds custom binary tree from custom level-order tokens [5, 6, 7]', async () => {
+      const res = await executeCppAlgorithm('tree-build', ['5', '6', '7'], 0);
+      expect(res.steps.length).toBeGreaterThan(0);
+      const last = res.steps[res.steps.length - 1];
+      expect(last.isCompleted).toBe(true);
+      expect(last.treeNodes).toBeDefined();
+      expect(last.treeNodes?.length).toBe(3);
+      expect(last.treeNodes?.map(n => n.value)).toContain(5);
+      expect(last.treeNodes?.map(n => n.value)).toContain(6);
+      expect(last.treeNodes?.map(n => n.value)).toContain(7);
+    });
+
+    it('finds min and max values dynamically in custom binary tree', async () => {
+      const minRes = await executeCppAlgorithm('tree-min', ['5', '6', '7'], 0);
+      const minLast = minRes.steps[minRes.steps.length - 1];
+      expect(minLast.variables?.min).toBe(5);
+
+      const maxRes = await executeCppAlgorithm('tree-max', ['5', '6', '7'], 0);
+      const maxLast = maxRes.steps[maxRes.steps.length - 1];
+      expect(maxLast.variables?.max).toBe(7);
     });
   });
 
@@ -240,6 +262,47 @@ describe('Trees & Heaps Visualizer (C++ Single Source of Truth)', () => {
 
       expect(ALGORITHMS_METADATA['min-heap'].complexity.timeComplexity.average).toBe('log n');
       expect(ALGORITHMS_METADATA['min-heap'].complexity.spaceComplexity.worst).toBe('1');
+    });
+  });
+
+  describe('Custom Dynamic Data Support (Linked Lists & Custom Heaps)', () => {
+    it('executes custom linked list creation and operations without hardcoding', async () => {
+      const createRes = await executeCppLinearStructure({
+        structure: 'singly',
+        operation: 'list-create',
+        values: [5, 6, 7]
+      });
+      const lastCreate = createRes.steps[createRes.steps.length - 1];
+      expect(lastCreate.arrayState).toEqual([5, 6, 7]);
+      expect(lastCreate.linkedNodes?.length).toBe(3);
+
+      const insertHeadRes = await executeCppLinearStructure({
+        structure: 'singly',
+        operation: 'list-insert-head',
+        values: [5, 6, 7],
+        value: 99
+      });
+      const lastInsert = insertHeadRes.steps[insertHeadRes.steps.length - 1];
+      expect(lastInsert.arrayState).toEqual([99, 5, 6, 7]);
+      expect(lastInsert.linkedNodes?.[0].value).toBe(99);
+
+      const deleteTailRes = await executeCppLinearStructure({
+        structure: 'singly',
+        operation: 'list-delete-tail',
+        values: [5, 6, 7]
+      });
+      const lastDelete = deleteTailRes.steps[deleteTailRes.steps.length - 1];
+      expect(lastDelete.arrayState).toEqual([5, 6]);
+    });
+
+    it('builds custom heap from arbitrary array [4, 10, 3, 5, 1]', async () => {
+      const heapRes = await executeCppAlgorithm('min-heap-build', [4, 10, 3, 5, 1], 0);
+      const last = heapRes.steps[heapRes.steps.length - 1];
+      expect(last.isCompleted).toBe(true);
+      expect(last.arrayState).toBeDefined();
+      expect(last.arrayState?.length).toBe(5);
+      // In a min-heap, index 0 must be the minimum element (1)
+      expect(last.arrayState?.[0]).toBe(1);
     });
   });
 });

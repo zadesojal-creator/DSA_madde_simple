@@ -176,6 +176,37 @@ export const TreeControls: React.FC<TreeControlsProps> = ({
             <button
               type="button"
               disabled={disabled}
+              onClick={() => {
+                const target = handleValidateNumber(targetInput, 'Delete target');
+                if (target !== null) onExecute('tree-delete', target);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete Node
+            </button>
+
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onExecute('tree-min')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50"
+            >
+              Find Min
+            </button>
+
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onExecute('tree-max')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50"
+            >
+              Find Max
+            </button>
+
+            <button
+              type="button"
+              disabled={disabled}
               onClick={() => onExecute('tree-size')}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors disabled:opacity-50"
             >
@@ -201,6 +232,16 @@ export const TreeControls: React.FC<TreeControlsProps> = ({
             >
               <Leaf className="w-3.5 h-3.5 text-emerald-600" />
               Count Leaves
+            </button>
+
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onExecute('traversal-inorder')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+            >
+              <ArrowDownUp className="w-3.5 h-3.5" />
+              Inorder Traversal
             </button>
           </>
         )}

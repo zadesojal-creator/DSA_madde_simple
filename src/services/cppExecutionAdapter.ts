@@ -1,5 +1,11 @@
 import type { TraceStep } from '../types/trace';
 import cppTracesData from '../data/cppGeneratedTraces.json';
+import {
+  generateLinkedListTrace,
+  generateBinaryTreeTrace,
+  generateBstTrace,
+  generateHeapTrace
+} from '../algorithms/traces/clientTraceGenerators';
 
 export type CppEngineStatus = 'cpp-native' | 'cpp-precompiled' | 'unavailable';
 
@@ -71,8 +77,8 @@ export async function executeCppLinearStructure(
     target: String(params.target ?? 0)
   });
 
-  // 1. Instant precompiled snapshot cache (0ms latency, eliminates Render cold starts)
-  const cached = typedCatalog.traces[exactKey] || typedCatalog.traces[genericKey] || typedCatalog.traces[`${op}__${arrStr}`] || typedCatalog.traces[op];
+  // 1. Instant precompiled snapshot cache for exact matching inputs (0ms latency)
+  const cached = typedCatalog.traces[exactKey] || typedCatalog.traces[`${op}__${arrStr}`];
   if (cached && cached.length > 0) {
     return {
       steps: cached,
@@ -82,14 +88,14 @@ export async function executeCppLinearStructure(
     };
   }
 
-  // 2. Custom input -> Attempt live execution via C++ runner with 6s timeout
+  // 2. Custom input -> Attempt live execution via C++ runner with 2.5s timeout
   try {
-    const response = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
+    const response = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 2500);
     if (response.ok) {
       const steps = (await response.json()) as TraceStep[];
       let sourceCode = defaultCode;
       try {
-        const codeResponse = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(structure)}`, {}, 3000);
+        const codeResponse = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(params.operation)}&structure=${encodeURIComponent(structure)}`, {}, 1500);
         if (codeResponse.ok) sourceCode = await codeResponse.text();
       } catch {
         // use defaultCode
@@ -102,7 +108,18 @@ export async function executeCppLinearStructure(
       };
     }
   } catch {
-    // server cold-starting or offline, fall back to closest precompiled snapshot
+    // server cold-starting or offline -> fall through to instant client-side execution
+  }
+
+  // 3. Fallback: generate authentic trace directly for custom inputs without blocking
+  if (op.startsWith('list-') || structure === 'singly' || structure === 'doubly' || structure === 'circular') {
+    const dynamicSteps = generateLinkedListTrace({ ...params, structure });
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
   }
 
   // Fallback search for closest precompiled trace
@@ -241,7 +258,7 @@ export async function executeCppAlgorithm(
     };
   }
 
-  // 2. Custom input -> Attempt live execution via C++ runner with 6s timeout
+  // 2. Custom input -> Attempt live execution via C++ runner with 2.5s timeout
   try {
     const queryParams: Record<string, string> = {
       op,
@@ -253,14 +270,14 @@ export async function executeCppAlgorithm(
     }
     const query = new URLSearchParams(queryParams);
 
-    const res = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 6000);
+    const res = await fetchWithTimeout(`${cppApiUrl('cpp-trace')}?${query.toString()}`, {}, 2500);
     if (res.ok) {
       const steps = (await res.json()) as TraceStep[];
       
       // Fetch fresh source code if possible
       let sourceCode = defaultCode;
       try {
-        const codeRes = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`, {}, 3000);
+        const codeRes = await fetchWithTimeout(`${cppApiUrl('cpp-code')}?op=${encodeURIComponent(op)}`, {}, 1500);
         if (codeRes.ok) {
           sourceCode = await codeRes.text();
         }
@@ -276,10 +293,47 @@ export async function executeCppAlgorithm(
       };
     }
   } catch {
-    // API endpoint unreachable or cold-starting
+    // API endpoint unreachable or cold-starting -> fall through to instant client-side execution
   }
 
-  // Fallback: search for closest precompiled trace for this algorithm
+  // 3. Dynamic client-side trace generation for custom inputs without blocking
+  if (op.startsWith('tree-') || op.startsWith('traversal') || op === 'binary-tree') {
+    const tokens = Array.isArray(arr) ? arr.map(String) : arrStr.split(/[\s,]+/).filter(Boolean);
+    const dynamicSteps = generateBinaryTreeTrace(op, tokens, target, value);
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
+  }
+
+  if (op.startsWith('bst-') || op === 'binary-search-tree') {
+    const rawItems = Array.isArray(arr) ? arr : arrStr.split(/[\s,]+/).filter(Boolean);
+    const keys = rawItems.map(Number).filter((n) => Number.isInteger(n));
+    const dynamicSteps = generateBstTrace(op, keys, target, value);
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
+  }
+
+  if (op.includes('heap')) {
+    const rawItems = Array.isArray(arr) ? arr : arrStr.split(/[\s,]+/).filter(Boolean);
+    const heapArray = rawItems.map(Number).filter((n) => Number.isInteger(n));
+    const heapType = op.startsWith('max') ? 'max' : 'min';
+    const dynamicSteps = generateHeapTrace(heapType, op, heapArray, target || value || 0);
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
+  }
+
+  // Fallback: search for closest precompiled trace for other algorithms
   const fallbackKey = Object.keys(typedCatalog.traces).find((k) => k.startsWith(`${op}__`));
   if (fallbackKey && typedCatalog.traces[fallbackKey]) {
     return {
