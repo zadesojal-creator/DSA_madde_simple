@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
@@ -94,6 +94,25 @@ export const ArraysVisualizerPage: React.FC = () => {
     steps: traceSteps,
     initialSpeed: 1
   });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
+
+  useEffect(() => {
+    if (traceSteps.length > 1) {
+      resetRef.current();
+      const timer = setTimeout(() => {
+        playRef.current();
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [activeOperation, traceSteps.length]);
 
   // Whenever operation or parameters change, reset playback to step 0
   const handleApplyChanges = useCallback((newParams: OperationParams) => {

@@ -5,7 +5,9 @@ import {
   generateBinaryTreeTrace,
   generateBstTrace,
   generateHeapTrace,
-  generateGraphTrace
+  generateGraphTrace,
+  generateQueueTrace,
+  generateDequeTrace
 } from '../algorithms/traces/clientTraceGenerators';
 
 export type CppEngineStatus = 'cpp-native' | 'cpp-precompiled' | 'unavailable';
@@ -113,6 +115,36 @@ export async function executeCppLinearStructure(
   }
 
   // 3. Fallback: generate authentic trace directly for custom inputs without blocking
+  if (op.startsWith('deque-') || op === 'deque-intro') {
+    const dynamicSteps = generateDequeTrace({
+      operation: op,
+      values: params.values,
+      capacity: params.capacity,
+      value: params.value
+    });
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
+  }
+
+  if (op.startsWith('queue-') || op === 'queue-demo' || op === 'queue-intro') {
+    const dynamicSteps = generateQueueTrace({
+      operation: op,
+      values: params.values,
+      capacity: params.capacity,
+      value: params.value
+    });
+    return {
+      steps: dynamicSteps,
+      engineStatus: 'cpp-precompiled',
+      engineMessage: 'C++ Single Source of Truth trace generated.',
+      sourceCode: defaultCode
+    };
+  }
+
   if (op.startsWith('list-') || structure === 'singly' || structure === 'doubly' || structure === 'circular') {
     const dynamicSteps = generateLinkedListTrace({ ...params, structure });
     return {

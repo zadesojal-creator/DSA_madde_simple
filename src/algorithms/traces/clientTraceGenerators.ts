@@ -2786,3 +2786,404 @@ export function generateGraphTrace(params: GraphTraceGeneratorParams): TraceStep
 
   return steps;
 }
+
+// ============================================================================
+// 6. QUEUE & CIRCULAR QUEUE TRACE GENERATOR
+// ============================================================================
+
+export interface QueueTraceParams {
+  operation: string;
+  values: number[];
+  capacity?: number;
+  value?: number;
+}
+
+export function generateQueueTrace(params: QueueTraceParams): TraceStep[] {
+  const capacity = Math.max(1, Math.min(30, params.capacity ?? 5));
+  const operation = params.operation;
+  const initialValues = params.values.slice(0, capacity);
+  const operandValue = params.value ?? 40;
+
+  const storage = new Array<number>(capacity).fill(0);
+  const occupied = new Array<boolean>(capacity).fill(false);
+  let front = 0;
+  let count = 0;
+
+  // Populate initial values
+  initialValues.forEach((val, i) => {
+    storage[i] = val;
+    occupied[i] = true;
+    count++;
+  });
+
+  if (operation === 'queue-create' || operation === 'queue-demo') {
+    occupied.fill(false);
+    front = 0;
+    count = 0;
+  }
+
+  const steps: TraceStep[] = [];
+  let stepId = 0;
+
+  const getLogicalOrder = (): number[] => {
+    const order: number[] = [];
+    for (let i = 0; i < count; i++) {
+      order.push(storage[(front + i) % capacity]);
+    }
+    return order;
+  };
+
+  const emitSnapshot = (
+    title: string,
+    description: string,
+    line: number,
+    statusType: 'normal' | 'success' | 'overflow' | 'underflow' = 'normal',
+    result?: string,
+    activeSlot?: number
+  ) => {
+    const rear = count > 0 ? (front + count - 1) % capacity : -1;
+    const nextInsert = count < capacity ? (front + count) % capacity : -1;
+    steps.push({
+      id: stepId++,
+      stepIndex: steps.length,
+      eventType: operation,
+      title,
+      description,
+      sourceLine: line,
+      activeLine: line,
+      structureType: 'queue',
+      structureStorage: [...storage],
+      occupiedSlots: [...occupied],
+      logicalOrder: getLogicalOrder(),
+      frontIndex: count > 0 ? front : -1,
+      rearIndex: rear,
+      elementCount: count,
+      capacity,
+      activeIndices: activeSlot !== undefined && activeSlot >= 0 ? [activeSlot] : [],
+      variables: {
+        nextInsertionIndex: nextInsert,
+        ...(result !== undefined ? { result } : {})
+      },
+      statusType,
+      isCompleted: statusType === 'success' || statusType === 'overflow' || statusType === 'underflow'
+    });
+  };
+
+  emitSnapshot('Initial state', 'Bounded circular queue: front points to the first item and rear to the last item.', 1);
+
+  if (operation === 'queue-intro' || operation === 'queue-create') {
+    emitSnapshot(
+      'Operation complete',
+      operation === 'queue-create'
+        ? 'The queue is initialized empty.'
+        : 'Queue uses a fixed-capacity circular buffer; FIFO removes from the front.',
+      1,
+      'success'
+    );
+    return steps;
+  }
+
+  if (operation === 'queue-demo') {
+    emitSnapshot(
+      'Circular queue demonstration',
+      'Start empty. Circular indices let enqueues reuse freed slots without shifting existing values.',
+      22
+    );
+    for (let item = 10; item < 10 + capacity * 10; item += 10) {
+      const insertionIndex = (front + count) % capacity;
+      emitSnapshot('Calculate insertion index', `Insert ${item} at physical slot ${insertionIndex}.`, 3, 'normal', undefined, insertionIndex);
+      storage[insertionIndex] = item;
+      occupied[insertionIndex] = true;
+      count++;
+      emitSnapshot('Enqueue value', `Stored ${item}; size is now ${count}.`, 6, 'normal', undefined, insertionIndex);
+    }
+
+    const toRemove = Math.min(2, capacity);
+    for (let i = 0; i < toRemove; i++) {
+      const removed = storage[front];
+      occupied[front] = false;
+      front = (front + 1) % capacity;
+      count--;
+      emitSnapshot('Dequeue front', `Removed ${removed} and advanced front circularly.`, 14);
+    }
+
+    for (let item = 90; count < capacity; item += 10) {
+      const insertionIndex = (front + count) % capacity;
+      storage[insertionIndex] = item;
+      occupied[insertionIndex] = true;
+      count++;
+      emitSnapshot('Wraparound enqueue', `Reused physical slot ${insertionIndex} for ${item} via (rear + 1) % capacity.`, 6, 'normal', undefined, insertionIndex);
+    }
+
+    emitSnapshot('Full queue', 'All capacity slots are occupied after circular wraparound.', 18, 'normal');
+
+    // Attempt overflow
+    emitSnapshot('Enqueue rejected', 'Attempted enqueue while full; rejected without changing state.', 2, 'overflow');
+
+    // Drain
+    while (count > 0) {
+      const removed = storage[front];
+      occupied[front] = false;
+      front = (front + 1) % capacity;
+      count--;
+      emitSnapshot('Drain queue', `Removed ${removed} in FIFO order.`, 14);
+    }
+
+    emitSnapshot('Dequeue rejected', 'Attempted dequeue while empty; rejected.', 10, 'underflow');
+    emitSnapshot(
+      'Operation complete',
+      'Demonstration covered initial empty, full, circular wraparound, full rejection, FIFO draining, and empty rejection.',
+      23,
+      'success'
+    );
+    return steps;
+  }
+
+  if (operation === 'queue-enqueue') {
+    emitSnapshot('Begin enqueue', `Attempt to insert ${operandValue} at the next circular position.`, 1);
+    emitSnapshot('Check full', 'Compare the element count with the fixed capacity.', 2);
+    if (count >= capacity) {
+      emitSnapshot('Enqueue rejected', 'Queue is full; storage and pointers remain unchanged.', 2, 'overflow');
+      return steps;
+    }
+    const next = (front + count) % capacity;
+    emitSnapshot('Calculate insertion index', `next = (front + size) % capacity = (${front} + ${count}) % ${capacity} = ${next}.`, 3, 'normal', undefined, next);
+    storage[next] = operandValue;
+    occupied[next] = true;
+    emitSnapshot('Write value', `Write value ${operandValue} into physical slot [${next}].`, 4, 'normal', undefined, next);
+    count++;
+    emitSnapshot('Update size', `Increase element count to ${count}.`, 5, 'normal', undefined, next);
+    emitSnapshot('Operation complete', `Enqueue completed: ${operandValue} stored at slot [${next}].`, 6, 'success');
+    return steps;
+  }
+
+  if (operation === 'queue-dequeue') {
+    emitSnapshot('Begin dequeue', 'Attempt to remove the logical front element.', 1);
+    emitSnapshot('Check empty', 'Test whether the element count is zero.', 2);
+    if (count === 0) {
+      emitSnapshot('Dequeue rejected', 'Queue is empty; no slot or pointer changes.', 3, 'underflow');
+      return steps;
+    }
+    const removedIndex = front;
+    const removed = storage[front];
+    emitSnapshot('Read front value', `Read value ${removed} before removing it.`, 4, 'normal', String(removed), removedIndex);
+    occupied[front] = false;
+    emitSnapshot('Remove front slot', `Mark physical slot [${removedIndex}] unoccupied.`, 5, 'normal', String(removed), removedIndex);
+    front = (front + 1) % capacity;
+    count--;
+    emitSnapshot('Advance front', `Advance front circularly to [${front}] and decrement size to ${count}.`, 6, 'normal', String(removed));
+    emitSnapshot('Operation complete', `Dequeued ${removed}.`, 7, 'success', String(removed));
+    return steps;
+  }
+
+  if (operation === 'queue-peek' || operation === 'queue-rear') {
+    const isRear = operation === 'queue-rear';
+    emitSnapshot(isRear ? 'Inspect rear' : 'Inspect front', `Read without removing the logical ${isRear ? 'rear' : 'front'}.`, 1);
+    if (count === 0) {
+      emitSnapshot('Inspection unavailable', 'Queue is empty; there is no value to inspect.', 2, 'underflow');
+    } else {
+      const idx = isRear ? (front + count - 1) % capacity : front;
+      const resVal = storage[idx];
+      emitSnapshot('Operation complete', `The inspected ${isRear ? 'rear' : 'front'} value is ${resVal} at slot [${idx}].`, isRear ? 4 : 3, 'success', String(resVal), idx);
+    }
+    return steps;
+  }
+
+  if (operation === 'queue-is-empty' || operation === 'queue-is-full' || operation === 'queue-size') {
+    const empty = count === 0;
+    const full = count >= capacity;
+    const res = operation === 'queue-is-empty' ? (empty ? 'true' : 'false') : operation === 'queue-is-full' ? (full ? 'true' : 'false') : String(count);
+    emitSnapshot('Evaluate query', `The queue method returns ${res}.`, 1, 'normal', res);
+    emitSnapshot('Operation complete', `Query result: ${res}.`, 2, 'success', res);
+    return steps;
+  }
+
+  if (operation === 'queue-clear') {
+    emitSnapshot('Begin clear', 'Clear every occupied marker, then reset front and count.', 1);
+    occupied.fill(false);
+    emitSnapshot('Clear occupancy flags', 'Mark every physical slot unoccupied.', 2);
+    front = 0;
+    emitSnapshot('Reset front', 'Set front to index 0.', 3);
+    count = 0;
+    emitSnapshot('Reset size', 'Set current element count to 0.', 4);
+    emitSnapshot('Operation complete', 'Queue is empty after clear.', 5, 'success');
+    return steps;
+  }
+
+  return steps;
+}
+
+// ============================================================================
+// 7. DEQUE (DOUBLE-ENDED QUEUE) TRACE GENERATOR
+// ============================================================================
+
+export interface DequeTraceParams {
+  operation: string;
+  values: number[];
+  capacity?: number;
+  value?: number;
+}
+
+export function generateDequeTrace(params: DequeTraceParams): TraceStep[] {
+  const capacity = Math.max(1, Math.min(30, params.capacity ?? 5));
+  const operation = params.operation;
+  const initialValues = params.values.slice(0, capacity);
+  const operandValue = params.value ?? 40;
+
+  const storage = new Array<number>(capacity).fill(0);
+  const occupied = new Array<boolean>(capacity).fill(false);
+  let front = 0;
+  let count = 0;
+
+  initialValues.forEach((val, i) => {
+    storage[i] = val;
+    occupied[i] = true;
+    count++;
+  });
+
+  const steps: TraceStep[] = [];
+  let stepId = 0;
+
+  const getLogicalOrder = (): number[] => {
+    const order: number[] = [];
+    for (let i = 0; i < count; i++) {
+      order.push(storage[(front + i) % capacity]);
+    }
+    return order;
+  };
+
+  const emitSnapshot = (
+    title: string,
+    description: string,
+    line: number,
+    statusType: 'normal' | 'success' | 'overflow' | 'underflow' = 'normal',
+    result?: string,
+    activeSlot?: number
+  ) => {
+    const back = count > 0 ? (front + count - 1) % capacity : -1;
+    steps.push({
+      id: stepId++,
+      stepIndex: steps.length,
+      eventType: operation,
+      title,
+      description,
+      sourceLine: line,
+      activeLine: line,
+      structureType: 'deque',
+      structureStorage: [...storage],
+      occupiedSlots: [...occupied],
+      logicalOrder: getLogicalOrder(),
+      dequeFrontIndex: count > 0 ? front : -1,
+      dequeBackIndex: back,
+      frontIndex: count > 0 ? front : -1,
+      rearIndex: back,
+      elementCount: count,
+      capacity,
+      activeIndices: activeSlot !== undefined && activeSlot >= 0 ? [activeSlot] : [],
+      variables: {
+        ...(result !== undefined ? { result } : {})
+      },
+      statusType,
+      isCompleted: statusType === 'success' || statusType === 'overflow' || statusType === 'underflow'
+    });
+  };
+
+  emitSnapshot('Initial state', 'Circular deque stores items from front to back.', 1);
+
+  if (operation === 'deque-intro') {
+    emitSnapshot('Operation complete', 'A deque supports constant-time insertion and removal at both ends.', 1, 'success');
+    return steps;
+  }
+
+  emitSnapshot('Check boundary', 'Check whether the requested operation is valid for the current size and capacity.', 2);
+
+  if (operation === 'deque-push-front') {
+    if (count >= capacity) {
+      emitSnapshot('Insertion rejected', 'Deque is full; no storage changes were made.', 2, 'overflow');
+      return steps;
+    }
+    const newFront = (front - 1 + capacity) % capacity;
+    front = newFront;
+    emitSnapshot('Move front backward', `front = (front - 1 + capacity) % capacity = ${newFront}.`, 3, 'normal', undefined, newFront);
+    storage[front] = operandValue;
+    occupied[front] = true;
+    emitSnapshot('Write front slot', `Write ${operandValue} into slot [${front}].`, 4, 'normal', undefined, front);
+    count++;
+    emitSnapshot('Update size', `Increase element count to ${count}.`, 5, 'normal', undefined, front);
+    emitSnapshot('Operation complete', `Pushed ${operandValue} to front at slot [${front}].`, 6, 'success');
+    return steps;
+  }
+
+  if (operation === 'deque-push-back') {
+    if (count >= capacity) {
+      emitSnapshot('Insertion rejected', 'Deque is full; no storage changes were made.', 2, 'overflow');
+      return steps;
+    }
+    const back = (front + count) % capacity;
+    emitSnapshot('Calculate back slot', `back = (front + size) % capacity = ${back}.`, 3, 'normal', undefined, back);
+    storage[back] = operandValue;
+    occupied[back] = true;
+    emitSnapshot('Write back slot', `Write ${operandValue} into slot [${back}].`, 4, 'normal', undefined, back);
+    count++;
+    emitSnapshot('Update size', `Increase element count to ${count}.`, 5, 'normal', undefined, back);
+    emitSnapshot('Operation complete', `Pushed ${operandValue} to back at slot [${back}].`, 6, 'success');
+    return steps;
+  }
+
+  if (operation === 'deque-pop-front') {
+    if (count === 0) {
+      emitSnapshot('Removal rejected', 'Deque is empty; no pointers or slots changed.', 2, 'underflow');
+      return steps;
+    }
+    const removed = storage[front];
+    const removedIdx = front;
+    emitSnapshot('Read front value', `Read ${removed} from front slot [${removedIdx}].`, 3, 'normal', String(removed), removedIdx);
+    occupied[front] = false;
+    emitSnapshot('Clear occupied slot', `Mark slot [${removedIdx}] unoccupied.`, 4, 'normal', String(removed), removedIdx);
+    front = (front + 1) % capacity;
+    count--;
+    emitSnapshot('Advance front', `Move front to next circular slot [${front}].`, 5, 'normal', String(removed));
+    emitSnapshot('Operation complete', `Popped ${removed} from front.`, 7, 'success', String(removed));
+    return steps;
+  }
+
+  if (operation === 'deque-pop-back') {
+    if (count === 0) {
+      emitSnapshot('Removal rejected', 'Deque is empty; no pointers or slots changed.', 2, 'underflow');
+      return steps;
+    }
+    const backIdx = (front + count - 1) % capacity;
+    const removed = storage[backIdx];
+    emitSnapshot('Read back value', `Read ${removed} from back slot [${backIdx}].`, 4, 'normal', String(removed), backIdx);
+    occupied[backIdx] = false;
+    emitSnapshot('Clear occupied slot', `Mark slot [${backIdx}] unoccupied.`, 5, 'normal', String(removed), backIdx);
+    count--;
+    emitSnapshot('Update size', `Decreased size to ${count}.`, 6, 'normal', String(removed));
+    emitSnapshot('Operation complete', `Popped ${removed} from back.`, 7, 'success', String(removed));
+    return steps;
+  }
+
+  if (operation === 'deque-peek-front' || operation === 'deque-peek-back') {
+    const isBack = operation === 'deque-peek-back';
+    emitSnapshot(isBack ? 'Inspect back' : 'Inspect front', `Read value without removing from ${isBack ? 'back' : 'front'}.`, 1);
+    if (count === 0) {
+      emitSnapshot('Inspection unavailable', 'Deque is empty.', 2, 'underflow');
+    } else {
+      const idx = isBack ? (front + count - 1) % capacity : front;
+      const resVal = storage[idx];
+      emitSnapshot('Operation complete', `The inspected ${isBack ? 'back' : 'front'} value is ${resVal} at slot [${idx}].`, 3, 'success', String(resVal), idx);
+    }
+    return steps;
+  }
+
+  if (operation === 'deque-is-empty' || operation === 'deque-is-full' || operation === 'deque-size') {
+    const empty = count === 0;
+    const full = count >= capacity;
+    const res = operation === 'deque-is-empty' ? (empty ? 'true' : 'false') : operation === 'deque-is-full' ? (full ? 'true' : 'false') : String(count);
+    emitSnapshot('Evaluate query', `The deque method returns ${res}.`, 1, 'normal', res);
+    emitSnapshot('Operation complete', `Query result: ${res}.`, 2, 'success', res);
+    return steps;
+  }
+
+  return steps;
+}

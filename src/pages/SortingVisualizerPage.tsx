@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
@@ -38,6 +38,21 @@ export const SortingVisualizerPage: React.FC = () => {
   const [engineStatus, setEngineStatus] = useState<CppEngineStatus>('cpp-precompiled');
   const [engineMessage, setEngineMessage] = useState<string>('');
 
+  // Playback controller
+  const playback = usePlayback({
+    steps: traceSteps,
+    initialSpeed: 1
+  });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
+
   // Execute C++ algorithm to generate trace
   useEffect(() => {
     let ignore = false;
@@ -47,18 +62,18 @@ export const SortingVisualizerPage: React.FC = () => {
         setCppSourceCode(result.sourceCode);
         setEngineStatus(result.engineStatus);
         setEngineMessage(result.engineMessage);
+        if (result.steps.length > 1) {
+          resetRef.current();
+          setTimeout(() => {
+            playRef.current();
+          }, 80);
+        }
       }
     });
     return () => {
       ignore = true;
     };
   }, [activeAlgorithmId, currentArray]);
-
-  // Playback controller
-  const playback = usePlayback({
-    steps: traceSteps,
-    initialSpeed: 1
-  });
 
   const currentStep = playback.currentStep;
 

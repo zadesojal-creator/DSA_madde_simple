@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
 import { TopicBreadcrumbs } from '../components/workspace/TopicBreadcrumbs';
 import { VisualizationCanvas } from '../components/workspace/VisualizationCanvas';
@@ -114,6 +114,25 @@ export const ArrayTraversalDemo: React.FC = () => {
     steps: traceSteps,
     initialSpeed: 1
   });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
+
+  useEffect(() => {
+    if (traceSteps.length > 1) {
+      resetRef.current();
+      const timer = setTimeout(() => {
+        playRef.current();
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [array, traceSteps.length]);
 
   const handleApplyArray = (newArr: number[]) => {
     setArray(newArr);

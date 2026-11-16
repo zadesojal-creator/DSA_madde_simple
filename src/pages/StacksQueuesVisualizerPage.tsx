@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Play, RotateCcw, Layers3, ArrowRightLeft } from 'lucide-react';
 import { VisualizerLayout } from '../components/workspace/VisualizerLayout';
@@ -45,6 +45,25 @@ export const StacksQueuesVisualizerPage: React.FC = () => {
 
   const traceSteps = useMemo(() => buildStackTrace(activeOperation, params), [activeOperation, params]);
   const playback = usePlayback({ steps: traceSteps, initialSpeed: 1 });
+
+  const { play, reset: resetPlayback } = playback;
+  const playRef = useRef(play);
+  const resetRef = useRef(resetPlayback);
+
+  useEffect(() => {
+    playRef.current = play;
+    resetRef.current = resetPlayback;
+  }, [play, resetPlayback]);
+
+  useEffect(() => {
+    if (traceSteps.length > 1) {
+      resetRef.current();
+      const timer = setTimeout(() => {
+        playRef.current();
+      }, 80);
+      return () => clearTimeout(timer);
+    }
+  }, [activeOperation, traceSteps.length]);
 
   const handleSelectOperation = useCallback((nextOp: StackOperationId) => {
     const nextPath = `/visualizer/stacks-queues/${nextOp}`;
